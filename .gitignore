@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Save data (runtime artifacts)
+savegame.json
+*.save.json
+
+# Go build output
+/trpg
+/bin/
+*.exe
+*.test
+*.out
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
