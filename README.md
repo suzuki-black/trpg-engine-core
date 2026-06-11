@@ -27,7 +27,7 @@ Requires [Go](https://go.dev/dl/) 1.21+. Optional: [Ollama](https://ollama.com/)
 
 ```bash
 # Clone
-git clone https://github.com/suzuki-black/trpg-engine-core.git
+git clone git@github.com:suzuki-black/trpg-engine-core.git
 cd trpg-engine-core
 
 # Pull a model (recommended for Japanese)
@@ -115,7 +115,7 @@ The bundled scenario *“The Light of the Forgotten Shrine”* and its NPCs are 
 [Go](https://go.dev/dl/) 1.21+ が必要。任意で日本語対応モデルを入れた [Ollama](https://ollama.com/)。
 
 ```bash
-git clone https://github.com/suzuki-black/trpg-engine-core.git
+git clone git@github.com:suzuki-black/trpg-engine-core.git
 cd trpg-engine-core
 
 # モデル取得（日本語推奨）
