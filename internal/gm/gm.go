@@ -48,10 +48,11 @@ const SystemPrompt = `あなたはテキストTRPGのゲームマスター（GM�
 
 // GM は LLM クライアントを保持する。
 type GM struct {
-	llm llm.Client
+	llm       llm.Client
+	qcRetries int // 非日本語混入時に書き直させる最大回数
 }
 
-func New(c llm.Client) *GM { return &GM{llm: c} }
+func New(c llm.Client, qcRetries int) *GM { return &GM{llm: c, qcRetries: qcRetries} }
 
 // BuildContext はコンテキスト入力を構造化テキストにする。docs/02-gm-prompt.md §2.3(2)
 // docs/01-architecture.md §1.3(1): 章情報＋シーン＋行動宣言＋判定結果＋関連状態。
@@ -82,9 +83,10 @@ func BuildContext(ch *scenario.Chapter, sess *state.Session, action string, res 
 	return b.String()
 }
 
-// Narrate は GM の描写を生成する。
+// Narrate は GM の描写を生成する。非日本語の混入があれば書き直させる（TODO#1）。
 func (g *GM) Narrate(ctx context.Context, contextInput string) (string, error) {
-	return g.llm.Generate(ctx, SystemPrompt, contextInput)
+	out, _ := llm.GenerateClean(ctx, g.llm, SystemPrompt, contextInput, g.qcRetries)
+	return out, nil
 }
 
 func dflt(s, d string) string {

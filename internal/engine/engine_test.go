@@ -24,7 +24,7 @@ func newCombatEngine(t *testing.T, seed int64) (*Engine, *state.Session) {
 	sess.ChapterID = "ch04"
 	sess.SceneSummary = scn.Chapter("ch04").SceneSummary
 	mock := llm.NewMock()
-	eng := New(scn, sess, rand.New(rand.NewSource(seed)), gm.New(mock), npc.New(mock))
+	eng := New(scn, sess, rand.New(rand.NewSource(seed)), gm.New(mock, 0), npc.New(mock, 0))
 	eng.InitNPCs() // ここでボスが初期化される
 	return eng, sess
 }

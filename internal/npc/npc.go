@@ -16,10 +16,11 @@ import (
 )
 
 type NPC struct {
-	llm llm.Client
+	llm       llm.Client
+	qcRetries int // 非日本語混入時に書き直させる最大回数
 }
 
-func New(c llm.Client) *NPC { return &NPC{llm: c} }
+func New(c llm.Client, qcRetries int) *NPC { return &NPC{llm: c, qcRetries: qcRetries} }
 
 // systemPrompt は人格テンプレートを展開する。hidden_goal は「自分からは明かすな」と注記。
 func systemPrompt(t scenario.NPCTemplate, att state.Attitude) string {
@@ -46,9 +47,7 @@ func (n *NPC) Speak(ctx context.Context, t scenario.NPCTemplate, att state.Attit
 	sys := systemPrompt(t, att)
 	user := fmt.Sprintf("[NPC] %s\n[状況] %s\n[プレイヤーの発言・行動] %s\n上記に対し、line と tone の2行で応答してください。",
 		t.Name, sceneSummary, playerSays)
-	out, err := n.llm.Generate(ctx, sys, user)
-	if err != nil {
-		return "", err
-	}
+	// 非日本語の混入があれば書き直させる。"line:"/"tone:" ラベルは検査対象外（TODO#1）。
+	out, _ := llm.GenerateClean(ctx, n.llm, sys, user, n.qcRetries, "line:", "tone:")
 	return strings.TrimSpace(out), nil
 }

@@ -33,12 +33,13 @@ const defaultSavePath = "savegame.json"
 
 func main() {
 	var (
-		endpoint = flag.String("endpoint", "http://localhost:11434", "Ollama endpoint")
-		model    = flag.String("model", "qwen2.5:7b", "Ollama model")
-		mock     = flag.Bool("mock", false, "force offline mock LLM")
-		seed     = flag.Int64("seed", 0, "RNG seed (0 = time-based)")
-		demo     = flag.Bool("demo", false, "run scripted demo turns")
-		loadPath = flag.String("load", "", "起動時にセーブファイルから再開する")
+		endpoint  = flag.String("endpoint", "http://localhost:11434", "Ollama endpoint")
+		model     = flag.String("model", "qwen2.5:7b", "Ollama model")
+		mock      = flag.Bool("mock", false, "force offline mock LLM")
+		seed      = flag.Int64("seed", 0, "RNG seed (0 = time-based)")
+		demo      = flag.Bool("demo", false, "run scripted demo turns")
+		loadPath  = flag.String("load", "", "起動時にセーブファイルから再開する")
+		qcRetries = flag.Int("qc-retries", 2, "非日本語混入時に書き直させる最大回数（0で無効）")
 	)
 	flag.Parse()
 
@@ -76,7 +77,7 @@ func main() {
 	sess.SceneSummary = scn.Chapters[0].SceneSummary
 	sess.World = state.World{TimeOfDay: "夕", Weather: "曇り", Alertness: "低", Ambient: "酒場のざわめき、薪の匂い"}
 
-	eng := engine.New(scn, sess, rng, gm.New(client), npc.New(client))
+	eng := engine.New(scn, sess, rng, gm.New(client, *qcRetries), npc.New(client, *qcRetries))
 	eng.InitNPCs()
 
 	// -load 指定時はセーブから再開。

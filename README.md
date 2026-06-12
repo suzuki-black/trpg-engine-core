@@ -73,9 +73,10 @@ Covers D20 critical boundaries & difficulty mapping, the boss-combat loop throug
 
 ## 🗺️ Roadmap (TODO)
 
+- [x] **Non-Japanese output filter** — detects simplified-Chinese / foreign scripts / stray Latin words in GM & NPC output and regenerates in Japanese ([`internal/textqc`](internal/textqc/textqc.go), tunable via `-qc-retries`).
+
 Planned but **not yet implemented**:
 
-- [ ] **Non-Japanese output filter** — detect/strip or regenerate when a small model leaks foreign words.
 - [ ] **Multi-slot saves & autosave** — auto-save on chapter transition.
 - [ ] **Tactical combat** — defend, item use, and NPC assists as combat options.
 - [ ] **Externalized scenarios** — define chapters/NPCs in JSON/YAML, decoupled from the engine.
@@ -161,9 +162,10 @@ D20のクリティカル境界・難易度マッピング、ボス戦の撃破�
 
 ## 🗺️ ロードマップ（TODO）
 
+- [x] **非日本語フィルタ** — GM/NPC出力の簡体字・他言語スクリプト・ラテン語片を検知し、日本語で再生成（[`internal/textqc`](internal/textqc/textqc.go)、`-qc-retries` で調整可）。
+
 予定はありますが**未実装**：
 
-- [ ] **非日本語フィルタ** — 小型モデルの外国語混入を検知し除去または再生成。
 - [ ] **マルチセーブ＆オートセーブ** — 章進行時に自動保存。
 - [ ] **戦闘の戦術化** — 防御・アイテム使用・NPC加勢を選択肢に追加。
 - [ ] **シナリオの外部化** — 章/NPCを JSON/YAML で定義し、エンジンと分離。
