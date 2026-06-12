@@ -4,6 +4,7 @@
 # Save data (runtime artifacts)
 savegame.json
 *.save.json
+/saves/
 
 # Go build output
 /trpg

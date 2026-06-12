@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,7 +30,20 @@ import (
 	"trpg-engine-core/internal/state"
 )
 
-const defaultSavePath = "savegame.json"
+const (
+	savesDir     = "saves"     // セーブスロットを置くディレクトリ
+	quickSlot    = "quicksave" // 名前省略時のスロット
+	autosaveSlot = "autosave"  // 章進行時の自動保存スロット
+)
+
+// slotPath はスロット名をファイルパスに解決する。
+// "/" や ".json" を含む値は生パスとして扱う（後方互換・任意パス指定）。
+func slotPath(name string) string {
+	if strings.ContainsRune(name, '/') || strings.HasSuffix(name, ".json") {
+		return name
+	}
+	return filepath.Join(savesDir, name+".json")
+}
 
 func main() {
 	var (
@@ -38,7 +52,7 @@ func main() {
 		mock      = flag.Bool("mock", false, "force offline mock LLM")
 		seed      = flag.Int64("seed", 0, "RNG seed (0 = time-based)")
 		demo      = flag.Bool("demo", false, "run scripted demo turns")
-		loadPath  = flag.String("load", "", "起動時にセーブファイルから再開する")
+		loadPath  = flag.String("load", "", "起動時にセーブ（スロット名 or パス）から再開する")
 		qcRetries = flag.Int("qc-retries", 2, "非日本語混入時に書き直させる最大回数（0で無効）")
 	)
 	flag.Parse()
@@ -80,15 +94,16 @@ func main() {
 	eng := engine.New(scn, sess, rng, gm.New(client, *qcRetries), npc.New(client, *qcRetries))
 	eng.InitNPCs()
 
-	// -load 指定時はセーブから再開。
+	// -load 指定時はセーブ（スロット名 or パス）から再開。
 	if *loadPath != "" {
-		loaded, err := persist.Load(*loadPath)
+		path := slotPath(*loadPath)
+		loaded, err := persist.Load(path)
 		if err != nil {
 			fmt.Printf("ロード失敗: %v\n", err)
 		} else {
 			eng.LoadSession(loaded)
 			sess = loaded
-			fmt.Printf("（%s から再開しました）\n", *loadPath)
+			fmt.Printf("（%s から再開しました）\n", path)
 		}
 	}
 
@@ -111,7 +126,7 @@ func printIntro(scn *scenario.Scenario, sess *state.Session, client llm.Client) 
 		sess.Player.Name, sess.Player.Class,
 		sess.Player.Stats["luck"], sess.Player.Stats["attack"], sess.Player.Stats["life"])
 	fmt.Printf("LLM: %s\n", client.Name())
-	fmt.Println("コマンド: 行動を日本語で入力 / 'status' 状態 / 'save [file]' / 'load [file]' / 'quit' 終了")
+	fmt.Println("コマンド: 行動を日本語で入力 / 'status' / 'saves' 一覧 / 'save [名前]' / 'load [名前]' / 'quit'")
 	fmt.Println("--------------------------------------------")
 	ch := scn.Chapter(sess.ChapterID)
 	fmt.Printf("\n▼ 第1章「%s」\n%s\n\n", ch.Title, ch.SceneSummary)
@@ -135,29 +150,33 @@ func runREPL(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, se
 		case input == "status":
 			printStatus(scn, sess)
 			continue
+		case input == "saves":
+			printSaves(scn)
+			continue
 		case input == "save" || strings.HasPrefix(input, "save "):
-			path := strings.TrimSpace(strings.TrimPrefix(input, "save"))
-			if path == "" {
-				path = defaultSavePath
+			name := strings.TrimSpace(strings.TrimPrefix(input, "save"))
+			if name == "" {
+				name = quickSlot
 			}
+			path := slotPath(name)
 			if err := persist.Save(path, eng.Sess); err != nil {
 				fmt.Printf("セーブ失敗: %v\n", err)
 			} else {
-				fmt.Printf("（%s に保存しました）\n", path)
+				fmt.Printf("（スロット '%s' に保存しました）\n", name)
 			}
 			continue
 		case input == "load" || strings.HasPrefix(input, "load "):
-			path := strings.TrimSpace(strings.TrimPrefix(input, "load"))
-			if path == "" {
-				path = defaultSavePath
+			name := strings.TrimSpace(strings.TrimPrefix(input, "load"))
+			if name == "" {
+				name = quickSlot
 			}
-			loaded, err := persist.Load(path)
+			loaded, err := persist.Load(slotPath(name))
 			if err != nil {
 				fmt.Printf("ロード失敗: %v\n", err)
 			} else {
 				eng.LoadSession(loaded)
 				sess = loaded
-				fmt.Printf("（%s から再開しました）\n", path)
+				fmt.Printf("（スロット '%s' から再開しました）\n", name)
 				printStatus(scn, sess)
 			}
 			continue
@@ -208,6 +227,12 @@ func doTurn(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, ses
 	if res.ChapterMoved {
 		fmt.Printf("\n──────── 章が進行 ────────\n▼ 第%s章「%s」\n%s\n",
 			chapterNo(scn, res.NewChapter.ID), res.NewChapter.Title, res.NewChapter.SceneSummary)
+		// 章進行時はオートセーブ（TODO#2）。失敗してもプレイは続行する。
+		if err := persist.Save(slotPath(autosaveSlot), eng.Sess); err != nil {
+			fmt.Printf("（オートセーブ失敗: %v）\n", err)
+		} else {
+			fmt.Println("（オートセーブしました → スロット 'autosave'）")
+		}
 	}
 	if res.Ended {
 		fmt.Printf("\n════════ エンディング ════════\n%s\n", res.Ending)
@@ -235,6 +260,31 @@ func printStatus(scn *scenario.Scenario, sess *state.Session) {
 	fmt.Printf("フラグ: %s\n", strings.Join(flags, ", "))
 	for id, n := range sess.NPCs {
 		fmt.Printf("NPC %s: 態度=%s\n", scn.NPCs[id].Name, n.Attitude.JP())
+	}
+}
+
+// printSaves はセーブスロット一覧を新しい順に表示する。
+func printSaves(scn *scenario.Scenario) {
+	infos, err := persist.List(savesDir)
+	if err != nil {
+		fmt.Printf("セーブ一覧の取得に失敗: %v\n", err)
+		return
+	}
+	if len(infos) == 0 {
+		fmt.Println("セーブはまだありません。'save [名前]' で保存できます。")
+		return
+	}
+	fmt.Println("── セーブスロット ──")
+	for _, in := range infos {
+		title := in.ChapterID
+		if ch := scn.Chapter(in.ChapterID); ch != nil {
+			title = fmt.Sprintf("%s「%s」", ch.ID, ch.Title)
+		}
+		when := "—"
+		if !in.SavedAt.IsZero() {
+			when = in.SavedAt.Format("01/02 15:04")
+		}
+		fmt.Printf("  %-12s  %s  [%s]\n", in.Name, title, when)
 	}
 }
 

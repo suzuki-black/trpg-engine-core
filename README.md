@@ -18,7 +18,7 @@ It runs out of the box — **no API keys, no cloud, zero third-party dependencie
 - 🎲 **Deterministic D20 engine** — `roll + stat modifier vs DC`, with critical success/failure at 20/1. Fully unit-tested.
 - 📖 **Chapter-structured scenario with branching** — fixed skeleton, improvised details. Multiple routes (fight vs. negotiate) reach the same clear condition and lead to 3 endings.
 - ⚔️ **Boss combat** — HP-based multi-round attack rolls, with bonuses wired to earlier choices (clues found / allies recruited make negotiation easier).
-- 💾 **Save & load** — full session state (player, NPC attitudes, chapter, flags, world, boss HP) to JSON.
+- 💾 **Save & load** — full session state (player, NPC attitudes, chapter, flags, world, boss HP) to JSON, with named multi-slot saves and autosave on chapter transitions.
 - 🪶 **Zero dependencies** — pure Go standard library; a single static binary.
 
 ## 🚀 Quick Start
@@ -43,7 +43,7 @@ go run ./cmd/trpg -model qwen2.5:7b -seed 4 -demo
 go run ./cmd/trpg -mock -seed 4 -demo
 ```
 
-In-session commands: type an action in Japanese, or `status` / `save [file]` / `load [file]` / `quit`.
+In-session commands: type an action in Japanese, or `status` / `saves` (list slots) / `save [name]` / `load [name]` / `quit`. Saves live in `saves/`; chapters autosave to the `autosave` slot.
 
 ## 🏗️ Architecture
 
@@ -74,10 +74,10 @@ Covers D20 critical boundaries & difficulty mapping, the boss-combat loop throug
 ## 🗺️ Roadmap (TODO)
 
 - [x] **Non-Japanese output filter** — detects simplified-Chinese / foreign scripts / stray Latin words in GM & NPC output and regenerates in Japanese ([`internal/textqc`](internal/textqc/textqc.go), tunable via `-qc-retries`).
+- [x] **Multi-slot saves & autosave** — named save slots under `saves/`, listed by recency; autosaves on every chapter transition.
 
 Planned but **not yet implemented**:
 
-- [ ] **Multi-slot saves & autosave** — auto-save on chapter transition.
 - [ ] **Tactical combat** — defend, item use, and NPC assists as combat options.
 - [ ] **Externalized scenarios** — define chapters/NPCs in JSON/YAML, decoupled from the engine.
 
@@ -132,7 +132,7 @@ go run ./cmd/trpg -model qwen2.5:7b -seed 4 -demo
 go run ./cmd/trpg -mock -seed 4 -demo
 ```
 
-対話コマンド：日本語で行動を入力、または `status` / `save [file]` / `load [file]` / `quit`。
+対話コマンド：日本語で行動を入力、または `status` / `saves`（一覧） / `save [名前]` / `load [名前]` / `quit`。セーブは `saves/` に保存され、章進行ごとに `autosave` スロットへ自動保存されます。
 
 ## 🏗️ アーキテクチャ
 
@@ -163,10 +163,10 @@ D20のクリティカル境界・難易度マッピング、ボス戦の撃破�
 ## 🗺️ ロードマップ（TODO）
 
 - [x] **非日本語フィルタ** — GM/NPC出力の簡体字・他言語スクリプト・ラテン語片を検知し、日本語で再生成（[`internal/textqc`](internal/textqc/textqc.go)、`-qc-retries` で調整可）。
+- [x] **マルチセーブ＆オートセーブ** — `saves/` に名前付きスロットで保存し新しい順に一覧表示。章進行ごとに自動保存。
 
 予定はありますが**未実装**：
 
-- [ ] **マルチセーブ＆オートセーブ** — 章進行時に自動保存。
 - [ ] **戦闘の戦術化** — 防御・アイテム使用・NPC加勢を選択肢に追加。
 - [ ] **シナリオの外部化** — 章/NPCを JSON/YAML で定義し、エンジンと分離。
 

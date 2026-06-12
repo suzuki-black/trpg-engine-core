@@ -3,6 +3,7 @@ package persist
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"trpg-engine-core/internal/state"
 )
@@ -61,5 +62,53 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 func TestLoadErrors(t *testing.T) {
 	if _, err := Load(filepath.Join(t.TempDir(), "missing.json")); err == nil {
 		t.Error("存在しないファイルでエラーにならなかった")
+	}
+}
+
+// List はスロットを新しい順に列挙し、章ID・保存時刻を読み取る。
+func TestListSlotsNewestFirst(t *testing.T) {
+	dir := t.TempDir()
+
+	// 時刻源を差し替え、保存順を制御する。
+	orig := now
+	defer func() { now = orig }()
+
+	mk := func(slot, chapter string, at time.Time) {
+		now = func() time.Time { return at }
+		s := state.NewSession()
+		s.ChapterID = chapter
+		if err := Save(filepath.Join(dir, slot+".json"), s); err != nil {
+			t.Fatalf("Save(%s): %v", slot, err)
+		}
+	}
+	base := time.Date(2026, 6, 12, 10, 0, 0, 0, time.UTC)
+	mk("slot_a", "ch01", base)
+	mk("slot_b", "ch03", base.Add(time.Hour)) // 最新
+	mk("slot_c", "ch02", base.Add(30*time.Minute))
+
+	infos, err := List(dir)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(infos) != 3 {
+		t.Fatalf("件数 = %d, want 3", len(infos))
+	}
+	// 新しい順: slot_b > slot_c > slot_a
+	if infos[0].Name != "slot_b" || infos[1].Name != "slot_c" || infos[2].Name != "slot_a" {
+		t.Errorf("並び順が新しい順でない: %s, %s, %s", infos[0].Name, infos[1].Name, infos[2].Name)
+	}
+	if infos[0].ChapterID != "ch03" {
+		t.Errorf("最新の章ID = %q, want ch03", infos[0].ChapterID)
+	}
+}
+
+// 存在しないディレクトリの List は空（エラーなし）。
+func TestListMissingDir(t *testing.T) {
+	infos, err := List(filepath.Join(t.TempDir(), "nope"))
+	if err != nil {
+		t.Errorf("存在しないdirで予期せぬエラー: %v", err)
+	}
+	if len(infos) != 0 {
+		t.Errorf("空のはずが %d 件", len(infos))
 	}
 }
