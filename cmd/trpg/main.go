@@ -117,10 +117,16 @@ func main() {
 
 	// --- RNG（判定エンジン用） ---
 	s := *seed
-	if s == 0 {
+	randomized := s == 0
+	if randomized {
 		s = time.Now().UnixNano()
 	}
 	rng := rand.New(rand.NewSource(s))
+	if randomized {
+		fmt.Println("乱数: ランダム（毎回変化）")
+	} else {
+		fmt.Printf("乱数: 固定 seed=%d（再現モード。ランダムにするには -seed を外す）\n", s)
+	}
 
 	// --- 構成（Go集約: すべて同一プロセス内） ---
 	scn := scenario.ForgottenShrine()
