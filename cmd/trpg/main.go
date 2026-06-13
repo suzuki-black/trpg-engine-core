@@ -25,6 +25,7 @@ import (
 
 	"trpg-engine-core/internal/engine"
 	"trpg-engine-core/internal/gm"
+	"trpg-engine-core/internal/intent"
 	"trpg-engine-core/internal/llm"
 	"trpg-engine-core/internal/npc"
 	"trpg-engine-core/internal/persist"
@@ -135,6 +136,11 @@ func main() {
 	sess.World = state.World{TimeOfDay: "夕", Weather: "曇り", Alertness: "低", Ambient: "酒場のざわめき、薪の匂い"}
 
 	eng := engine.New(scn, sess, rng, gm.New(client, *qcRetries), npc.New(client, *qcRetries))
+	// 実 LLM（Ollama）利用時は、キーワードで判定できない入力（かな書き・口語）を
+	// LLM に意図分類させるハイブリッド分類器を使う。mock 時はキーワードのまま。
+	if _, ok := client.(*llm.Ollama); ok {
+		eng.Classifier = intent.NewLLM(client, engine.ClassifyKeyword)
+	}
 	eng.InitNPCs()
 
 	// -load 指定時はセーブ（スロット名 or パス）から再開。
@@ -254,10 +260,12 @@ func doTurn(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, ses
 		fmt.Printf("エラー: %v\n", err)
 		return false
 	}
+	// 透明性: 行動をどう解釈したかを必ず示す。
+	fmt.Printf("\n〔解釈: %s〕\n", jpAction(res.Action))
 	if res.Check != nil {
 		c := res.Check
-		fmt.Printf("\n🎲 [判定] %s  D20=%d %+d = %d  vs DC%d → %s\n",
-			c.ActionType, c.Roll, c.StatMod, c.Total, c.DC, c.Outcome.JP())
+		fmt.Printf("🎲 [判定] %s  D20=%d %+d = %d  vs DC%d → %s\n",
+			jpAction(c.ActionType), c.Roll, c.StatMod, c.Total, c.DC, c.Outcome.JP())
 	}
 	if res.Combat != "" {
 		fmt.Printf("%s\n", res.Combat)
@@ -266,6 +274,11 @@ func doTurn(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, ses
 		fmt.Printf("\n💬 %s\n", indent(raw))
 	}
 	fmt.Printf("\n📖 %s\n", res.Narration)
+
+	// 透明性: 判定も進行も起きなかった時は理由とヒントを伝える。
+	if res.Hint != "" {
+		fmt.Printf("\n💡 %s\n", res.Hint)
+	}
 
 	if res.ChapterMoved {
 		fmt.Printf("\n──────── 章が進行 ────────\n▼ 第%s章「%s」\n%s\n",
@@ -328,6 +341,20 @@ func printSaves(scn *scenario.Scenario) {
 			when = in.SavedAt.Format("01/02 15:04")
 		}
 		fmt.Printf("  %-12s  %s  [%s]\n", in.Name, title, when)
+	}
+}
+
+// jpAction は行動種別を日本語ラベルにする（ユーザー向け表示）。
+func jpAction(a string) string {
+	switch a {
+	case "attack":
+		return "攻撃"
+	case "search":
+		return "探索・調べる"
+	case "talk":
+		return "会話・交渉"
+	default:
+		return "自由行動（判定なし）"
 	}
 }
 

@@ -24,10 +24,14 @@ type Engine struct {
 	Resolver *dice.Resolver
 	GM       *gm.GM
 	NPC      *npc.NPC
+	// Classifier は行動分類を差し替えるためのフック（LLM補助分類など）。
+	// nil の場合はキーワード分類（ClassifyKeyword）を使う。
+	Classifier func(ctx context.Context, input string) (action, stat string, needCheck bool)
 }
 
 // TurnResult は 1 ターンの出力（CLI へ渡す）。
 type TurnResult struct {
+	Action       string            // 分類された行動種別（attack/search/talk/move）
 	Check        *dice.CheckResult // 判定が走った場合のみ
 	Narration    string
 	NPCRaw       []string
@@ -36,6 +40,8 @@ type TurnResult struct {
 	NewChapter   *scenario.Chapter
 	Ended        bool
 	Ending       string
+	Progressed   bool   // 判定・章進行・フラグ変化など実質的な engagement があったか
+	Hint         string // 進展しなかった時のユーザー向けヒント
 }
 
 func New(scn *scenario.Scenario, sess *state.Session, rng *rand.Rand, g *gm.GM, n *npc.NPC) *Engine {
@@ -128,9 +134,17 @@ func ease(rank string) string {
 func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	ch := e.Scn.Chapter(e.Sess.ChapterID)
 	res := &TurnResult{}
+	trueFlagsBefore := countTrueFlags(e.Sess.Flags)
 
-	// 1) 行動種別の分類（セッション管理）
-	actionType, usedStat, needCheck := classify(input)
+	// 1) 行動種別の分類（セッション管理）。Classifier 未設定ならキーワード分類。
+	var actionType, usedStat string
+	var needCheck bool
+	if e.Classifier != nil {
+		actionType, usedStat, needCheck = e.Classifier(ctx, input)
+	} else {
+		actionType, usedStat, needCheck = classify(input)
+	}
+	res.Action = actionType
 
 	// 2) 判定が必要なら CheckRequest を組み立てて判定エンジンへ（§1.6）
 	var check *dice.CheckResult
@@ -214,7 +228,33 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 			res.Ending = e.computeEnding()
 		}
 	}
+
+	// 6) 透明性: 実質的な engagement があったかを判定し、無ければヒントを出す。
+	res.Progressed = check != nil || res.ChapterMoved || res.Ended ||
+		res.Combat != "" || countTrueFlags(e.Sess.Flags) > trueFlagsBefore
+	if !res.Progressed {
+		res.Hint = "この行動は判定にも進行にも結びつきませんでした。" +
+			"『誰に・何をするか』を具体的に書くと判定が起きます" +
+			"（例: 『カラスに祠の場所を尋ねる』『扉を調べる』『敵を攻撃する』）。\n" +
+			"いまの目標: " + ch.Goal
+	}
 	return res, nil
+}
+
+func countTrueFlags(flags map[string]bool) int {
+	n := 0
+	for _, v := range flags {
+		if v {
+			n++
+		}
+	}
+	return n
+}
+
+// ClassifyKeyword はキーワードによる行動分類（LLM非依存）。
+// Classifier フックのフォールバックとして外部から利用できる。
+func ClassifyKeyword(input string) (action, stat string, needCheck bool) {
+	return classify(input)
 }
 
 // pickNPC は会話相手を決める（名指し優先、なければ章の先頭NPC）。

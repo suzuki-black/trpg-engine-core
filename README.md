@@ -14,6 +14,7 @@ It runs out of the box — **no API keys, no cloud, dependency-light** (Go stand
 ## ✨ Features
 
 - 🧠 **AI Game Master** — improvises scene description and choices, constrained by the current chapter and a strict do-not list (can't overturn dice, leak un-unlocked lore, or kill NPCs at will).
+- 🗣️ **Natural-language input with feedback** — actions are classified by keyword first, then by the LLM for kana/casual phrasing. Every turn shows how your action was read, and if nothing happened, it tells you why and what the current objective is.
 - 🎭 **AI NPCs with persistent personalities** — each NPC has a personality, tone, public goal, hidden secret, and an attitude that shifts one step at a time. NPCs return *dialogue + tone only*; the GM weaves it into the prose.
 - 🎲 **Deterministic D20 engine** — `roll + stat modifier vs DC`, with critical success/failure at 20/1. Fully unit-tested.
 - 📖 **Chapter-structured scenario with branching** — fixed skeleton, improvised details. Multiple routes (fight vs. negotiate) reach the same clear condition and lead to 3 endings.
@@ -104,6 +105,7 @@ The bundled scenario *“The Light of the Forgotten Shrine”* and its NPCs are 
 ## ✨ 特徴
 
 - 🧠 **AI ゲームマスター** — 現在の章と厳格な禁止事項（判定の上書き・未解放情報の漏洩・NPCの勝手な殺害の禁止）に縛られつつ、情景と選択肢を即興生成。
+- 🗣️ **自然言語入力＋フィードバック** — 行動はまずキーワードで、漏れたら（ひらがな・口語）LLMで意図分類。毎ターン「どう解釈したか」を表示し、何も起きなかった時は理由と今の目標を伝える。
 - 🎭 **人格が持続する AI NPC** — 性格・口調・表向きの目的・隠された秘密を持ち、態度は1段階ずつ変化。NPCは*セリフ＋トーンのみ*を返し、GMが地の文へ統合。
 - 🎲 **決定論的な D20 エンジン** — `出目＋ステータス修正 vs DC`、20/1でクリティカル成功/失敗。単体テスト済み。
 - 📖 **章構造＋分岐シナリオ** — 骨格は固定、細部は即興。戦闘/交渉など複数ルートが同じクリア条件に至り、3通りの結末へ。
