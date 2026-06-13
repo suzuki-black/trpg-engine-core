@@ -58,6 +58,9 @@ func TestDetectsSimplified(t *testing.T) {
 	if IsClean("古びた纹章を闻いた") { // 纹(紋)・闻(聞)
 		t.Error("简体字 纹/闻 を検出できていない")
 	}
+	if IsClean("雾の中を进む") { // 雾(霧)・进(進)
+		t.Error("简体字 雾 を検出できていない")
+	}
 	_ = dirty
 }
 

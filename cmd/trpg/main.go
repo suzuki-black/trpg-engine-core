@@ -129,7 +129,7 @@ func printIntro(scn *scenario.Scenario, sess *state.Session, client llm.Client) 
 	fmt.Println("コマンド: 行動を日本語で入力 / 'status' / 'saves' 一覧 / 'save [名前]' / 'load [名前]' / 'quit'")
 	fmt.Println("--------------------------------------------")
 	ch := scn.Chapter(sess.ChapterID)
-	fmt.Printf("\n▼ 第1章「%s」\n%s\n\n", ch.Title, ch.SceneSummary)
+	fmt.Printf("\n▼ 第%s章「%s」\n%s\n\n", chapterNo(scn, ch.ID), ch.Title, ch.SceneSummary)
 }
 
 func runREPL(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, sess *state.Session) {

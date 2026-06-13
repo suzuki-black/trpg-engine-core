@@ -46,31 +46,52 @@ func New(scn *scenario.Scenario, sess *state.Session, rng *rand.Rand, g *gm.GM, 
 	}
 }
 
+// 行動種別ごとのキーワード。日本語は主動詞が文末に来やすいため、
+// 「文中で最も後ろに現れたキーワードの種別」を採用する（末尾重み付け）。
+// これにより「…調べていると話しかける」(=talk) のような誤爆を防ぐ。
+var (
+	attackKW = []string{
+		"攻撃", "斬りかか", "斬りつけ", "斬り", "斬る", "斬", "切りつけ", "切り伏せ",
+		"戦う", "殴", "打ち倒", "倒す", "討", "刺し", "突き刺", "振り下ろ", "叩き",
+		"一撃", "とどめ", "迎え撃", "attack",
+	}
+	searchKW = []string{
+		"調べ", "調査", "探索", "探る", "探す", "探し", "捜", "罠", "観察",
+		"見極", "見渡", "見回", "解く", "謎", "仕掛け", "紋章", "search",
+	}
+	talkKW = []string{
+		"交渉", "説得", "説き", "話しか", "話す", "話", "尋ね", "訊", "聞き", "聞く", "聞",
+		"問いかけ", "問い", "頼み込", "頼む", "頼", "語りかけ", "語りか", "呼びかけ",
+		"声をかけ", "なだめ", "宥め", "慰め", "鎮め", "挑発", "脅し", "脅", "talk",
+	}
+)
+
 // classify は行動宣言を行動種別に分類する。docs/01-architecture.md §1.6
-// （セッション管理の責務。簡易キーワードベース。LLMには成否を委ねない。）
+// （セッション管理の責務。LLMには成否を委ねない。）
+// 末尾重み付け: 最後に現れたキーワードの種別を主たる意図とみなす。
 // 戻り値: actionType, usedStat, 判定が必要か
 func classify(input string) (string, string, bool) {
 	s := strings.ToLower(input)
-	has := func(words ...string) bool {
-		for _, w := range words {
-			if strings.Contains(input, w) || strings.Contains(s, w) {
-				return true
+	best := -1
+	action, stat := "move", ""
+
+	scan := func(kws []string, a, st string) {
+		for _, kw := range kws {
+			if i := strings.LastIndex(s, strings.ToLower(kw)); i > best {
+				best, action, stat = i, a, st
 			}
 		}
-		return false
 	}
-	switch {
-	case has("攻撃", "斬", "戦う", "殴", "倒す", "attack"):
-		return "attack", "attack", true
-	case has("調べ", "探", "罠", "探索", "search", "観察"):
-		return "search", "luck", true
-	case has("交渉", "説得", "話", "尋ね", "聞", "頼", "talk", "脅"):
-		return "talk", "luck", true
-	case has("解く", "謎", "仕掛け", "紋章"):
-		return "search", "luck", true
-	default:
+	// search を先に、talk/attack を後に走査することで、同位置の競合時は
+	// より能動的な意図（攻撃・会話）を優先する。
+	scan(searchKW, "search", "luck")
+	scan(attackKW, "attack", "attack")
+	scan(talkKW, "talk", "luck")
+
+	if best < 0 {
 		return "move", "", false // 移動・宣言など判定不要
 	}
+	return action, stat, true
 }
 
 // difficultyFor はシナリオ管理の責務として難易度を決める。docs/01-architecture.md §1.6
@@ -118,8 +139,12 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		if usedStat != "" {
 			mod = e.Sess.Player.Modifier(usedStat) // プレイヤー状態管理が提供
 		}
-		// 第4章・交渉でミレーユ同行なら +2 補正。docs/05-scenario.md
+		// 第4章の同行ボーナス。docs/05-scenario.md
+		// 交渉はミレーユ同行で +2、戦闘はゴルツ加勢で +2。
 		if ch.ID == "ch04" && actionType == "talk" && e.Sess.Flag("mireille_ally") {
+			mod += 2
+		}
+		if ch.ID == "ch04" && actionType == "attack" && e.Sess.Flag("gorz_ally") {
 			mod += 2
 		}
 		req := dice.CheckRequest{
@@ -226,8 +251,9 @@ func (e *Engine) applyProgress(ch *scenario.Chapter, actionType, input string, c
 		if crit { // 道中の失敗は消耗
 			e.Sess.DamageLife(2)
 		}
-		// 戦う/迂回どちらでも、成功または前進で祠到達
-		if ok || actionType == "move" {
+		// 祠への到達は「前進する(move)」か「戦って突破(attack成功)」で確定する。
+		// 探索(search)や会話だけでは勝手に進まない（章スキップ防止）。
+		if actionType == "move" || (actionType == "attack" && ok) {
 			e.Sess.SetFlag("reached_shrine", true)
 		}
 	case "ch03":

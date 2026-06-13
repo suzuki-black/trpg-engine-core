@@ -73,6 +73,67 @@ func TestCombatRouteDefeatsBoss(t *testing.T) {
 	}
 }
 
+// 実プレイで分類ミスした台詞を回帰テストする（末尾重み付けで正される）。
+func TestClassifyIntent(t *testing.T) {
+	cases := []struct {
+		input      string
+		wantAction string
+		wantCheck  bool
+	}{
+		// 文中に「調べ/探」があっても、文末の意図（話す）を優先する
+		{"情報屋カラスに『異変について調べている。何か知らないか』と話しかける", "talk", true},
+		{"用心棒を探していると言い、ゴルツに声をかける", "talk", true},
+		// 以前は move 扱いで判定が出なかった交渉・攻撃の言い回し
+		{"精霊に語りかけて穏やかに鎮めようと試みる", "talk", true},
+		{"精霊にとどめの一撃を振り下ろす", "attack", true},
+		// 素直なケース
+		{"壁の紋章と床の仕掛けを調べる", "search", true},
+		{"剣を抜いて精霊を攻撃する", "attack", true},
+		{"そのまま森の道を進んで祠へ向かう", "move", false},
+		// 誤爆しやすい語: 「面倒」に attack(倒) が反応しない
+		{"面倒だが先へ進む", "move", false},
+	}
+	for _, c := range cases {
+		action, _, check := classify(c.input)
+		if action != c.wantAction || check != c.wantCheck {
+			t.Errorf("classify(%q) = (%s, check=%v), want (%s, %v)",
+				c.input, action, check, c.wantAction, c.wantCheck)
+		}
+	}
+}
+
+// 第2章ゲート: 探索(search)では進まず、前進(move)で祠へ到達する（章スキップ防止）。
+func TestChapter2GateRequiresAdvance(t *testing.T) {
+	scn := scenario.ForgottenShrine()
+	sess := state.NewSession()
+	sess.Player = state.PlayerCharacter{Stats: map[string]int{"luck": 12, "attack": 14, "life": 20}}
+	sess.ChapterID = "ch02"
+	sess.SceneSummary = scn.Chapter("ch02").SceneSummary
+	mock := llm.NewMock()
+	eng := New(scn, sess, rand.New(rand.NewSource(1)), gm.New(mock, 0), npc.New(mock, 0))
+	eng.InitNPCs()
+	ctx := context.Background()
+
+	// 探索しても reached_shrine は立たず、章は進まない。
+	if _, err := eng.Step(ctx, "あたりの茂みや足跡を調べる"); err != nil {
+		t.Fatal(err)
+	}
+	if sess.Flag("reached_shrine") {
+		t.Error("探索で reached_shrine が立ってしまった（章スキップ防止が効いていない）")
+	}
+	if sess.ChapterID != "ch02" {
+		t.Errorf("探索で章が進んだ: %s", sess.ChapterID)
+	}
+
+	// 前進すると祠に到達し、第3章へ。
+	if _, err := eng.Step(ctx, "そのまま森の道を進んで祠へ向かう"); err != nil {
+		t.Fatal(err)
+	}
+	if sess.ChapterID != "ch03" {
+		t.Errorf("前進後の章 = %s, want ch03", sess.ChapterID)
+	}
+}
+
 // 交渉ルート: clue_found があると第4章 talk の難易度が1段階下がる。
 func TestNegotiationRouteEased(t *testing.T) {
 	eng, sess := newCombatEngine(t, 1)
