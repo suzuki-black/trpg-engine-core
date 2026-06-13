@@ -15,11 +15,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 
 	"trpg-engine-core/internal/engine"
 	"trpg-engine-core/internal/gm"
@@ -29,6 +32,56 @@ import (
 	"trpg-engine-core/internal/scenario"
 	"trpg-engine-core/internal/state"
 )
+
+// promptReader は1行入力を読む。実端末では行編集（バックスペース・矢印キー）を
+// 有効にし、パイプ入力（demo/テスト）では素朴な行読みにフォールバックする。
+type promptReader struct {
+	fd      int
+	isTTY   bool
+	scanner *bufio.Scanner
+}
+
+func newPromptReader() *promptReader {
+	fd := int(os.Stdin.Fd())
+	return &promptReader{
+		fd:      fd,
+		isTTY:   term.IsTerminal(fd),
+		scanner: bufio.NewScanner(os.Stdin),
+	}
+}
+
+type stdio struct {
+	io.Reader
+	io.Writer
+}
+
+// read はプロンプトを表示して1行読む。第2戻り値が false なら入力終了。
+func (p *promptReader) read(prompt string) (string, bool) {
+	if !p.isTTY {
+		fmt.Print(prompt)
+		if !p.scanner.Scan() {
+			return "", false
+		}
+		return strings.TrimSpace(p.scanner.Text()), true
+	}
+	// 実端末: 入力の間だけ raw モードにし、行編集を term に任せる。
+	fmt.Print("\n")
+	old, err := term.MakeRaw(p.fd)
+	if err != nil {
+		fmt.Print(prompt)
+		if !p.scanner.Scan() {
+			return "", false
+		}
+		return strings.TrimSpace(p.scanner.Text()), true
+	}
+	t := term.NewTerminal(stdio{os.Stdin, os.Stdout}, strings.TrimLeft(prompt, "\n"))
+	line, err := t.ReadLine()
+	term.Restore(p.fd, old)
+	if err != nil { // EOF（Ctrl-D）など
+		return "", false
+	}
+	return strings.TrimSpace(line), true
+}
 
 const (
 	savesDir     = "saves"     // セーブスロットを置くディレクトリ
@@ -133,13 +186,12 @@ func printIntro(scn *scenario.Scenario, sess *state.Session, client llm.Client) 
 }
 
 func runREPL(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, sess *state.Session) {
-	sc := bufio.NewScanner(os.Stdin)
+	pr := newPromptReader()
 	for {
-		fmt.Print("\n> ")
-		if !sc.Scan() {
+		input, ok := pr.read("\n> ")
+		if !ok {
 			return
 		}
-		input := strings.TrimSpace(sc.Text())
 		if input == "" {
 			continue
 		}

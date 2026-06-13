@@ -5,7 +5,7 @@
 **Design philosophy: _the LLM creates, the engine decides._**
 Narration and roleplay are delegated to a local LLM (via [Ollama](https://ollama.com/)); D20 resolution, difficulty, flags, and chapter progression are owned by Go and never left to the model. This keeps the story free-form **and** the rules consistent.
 
-It runs out of the box — **no API keys, no cloud, zero third-party dependencies** (Go standard library only). If Ollama isn't running, it falls back to an offline mock so you can still see the machinery work.
+It runs out of the box — **no API keys, no cloud, dependency-light** (Go standard library plus `golang.org/x/term` for terminal line editing). If Ollama isn't running, it falls back to an offline mock so you can still see the machinery work.
 
 > ⚠️ **Prototype.** This is an early proof-of-concept, published for feedback and experimentation.
 
@@ -19,7 +19,7 @@ It runs out of the box — **no API keys, no cloud, zero third-party dependencie
 - 📖 **Chapter-structured scenario with branching** — fixed skeleton, improvised details. Multiple routes (fight vs. negotiate) reach the same clear condition and lead to 3 endings.
 - ⚔️ **Boss combat** — HP-based multi-round attack rolls, with bonuses wired to earlier choices (clues found / allies recruited make negotiation easier).
 - 💾 **Save & load** — full session state (player, NPC attitudes, chapter, flags, world, boss HP) to JSON, with named multi-slot saves and autosave on chapter transitions.
-- 🪶 **Zero dependencies** — pure Go standard library; a single static binary.
+- 🪶 **Dependency-light** — pure Go, a single static binary; the only dependency is `golang.org/x/term` (a Go sub-repo) for terminal line editing.
 
 ## 🚀 Quick Start
 
@@ -95,7 +95,7 @@ The bundled scenario *“The Light of the Forgotten Shrine”* and its NPCs are 
 **設計思想：_LLM は創造、エンジンは決定論。_**
 描写とロールプレイはローカル LLM（[Ollama](https://ollama.com/)）に委ね、D20 判定・難易度・フラグ・章進行は Go が管理してモデルに渡しません。これにより、物語の自由度と**ルールの一貫性**を両立します。
 
-外部依存ゼロ（Go 標準ライブラリのみ）で、**APIキー不要・クラウド不要**。Ollama が無い場合はオフラインの mock にフォールバックし、エンジンの動作だけでも確認できます。
+依存は最小限（Go 標準ライブラリ＋端末の行編集用 `golang.org/x/term` のみ）で、**APIキー不要・クラウド不要**。Ollama が無い場合はオフラインの mock にフォールバックし、エンジンの動作だけでも確認できます。
 
 > ⚠️ **試作品（プロトタイプ）です。** フィードバックと実験のために公開しています。
 
@@ -109,7 +109,7 @@ The bundled scenario *“The Light of the Forgotten Shrine”* and its NPCs are 
 - 📖 **章構造＋分岐シナリオ** — 骨格は固定、細部は即興。戦闘/交渉など複数ルートが同じクリア条件に至り、3通りの結末へ。
 - ⚔️ **ボス戦** — HP制の複数回 attack 判定。手がかり収集・仲間加入などの過去の選択が交渉を有利にする補正を実装。
 - 💾 **セーブ＆ロード** — セッション全状態（プレイヤー/NPC態度/章/フラグ/世界/ボスHP）を JSON で保存。
-- 🪶 **依存ゼロ** — Go 標準ライブラリのみ。単一バイナリ。
+- 🪶 **依存は最小限** — ほぼ Go 標準ライブラリ。単一バイナリ。端末の行編集に `golang.org/x/term` のみ使用。
 
 ## 🚀 クイックスタート
 
