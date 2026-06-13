@@ -91,13 +91,14 @@ func slotPath(name string) string {
 
 func main() {
 	var (
-		endpoint  = flag.String("endpoint", "http://localhost:11434", "Ollama endpoint")
-		model     = flag.String("model", "qwen2.5:7b", "Ollama model")
-		mock      = flag.Bool("mock", false, "force offline mock LLM")
-		seed      = flag.Int64("seed", 0, "RNG seed (0 = time-based)")
-		demo      = flag.Bool("demo", false, "run scripted demo turns")
-		loadPath  = flag.String("load", "", "起動時にセーブ（スロット名 or パス）から再開する")
-		qcRetries = flag.Int("qc-retries", 2, "非日本語混入時に書き直させる最大回数（0で無効）")
+		endpoint     = flag.String("endpoint", "http://localhost:11434", "Ollama endpoint")
+		model        = flag.String("model", "qwen2.5:7b", "Ollama model")
+		mock         = flag.Bool("mock", false, "force offline mock LLM")
+		seed         = flag.Int64("seed", 0, "RNG seed (0 = time-based)")
+		demo         = flag.Bool("demo", false, "run scripted demo turns")
+		loadPath     = flag.String("load", "", "起動時にセーブ（スロット名 or パス）から再開する")
+		qcRetries    = flag.Int("qc-retries", 2, "非日本語混入時に書き直させる最大回数（0で無効）")
+		scenarioPath = flag.String("scenario", "", "シナリオJSONのパス（未指定なら内蔵の『忘れられた祠の灯』）")
 	)
 	flag.Parse()
 
@@ -129,7 +130,18 @@ func main() {
 	}
 
 	// --- 構成（Go集約: すべて同一プロセス内） ---
-	scn := scenario.ForgottenShrine()
+	var scn *scenario.Scenario
+	if *scenarioPath != "" {
+		loaded, err := scenario.Load(*scenarioPath)
+		if err != nil {
+			fmt.Printf("シナリオ読み込み失敗: %v\n", err)
+			os.Exit(1)
+		}
+		scn = loaded
+		fmt.Printf("シナリオ: %s（%s）\n", scn.Title, *scenarioPath)
+	} else {
+		scn = scenario.ForgottenShrine()
+	}
 	sess := state.NewSession()
 	sess.Player = state.PlayerCharacter{
 		Name:      "アルド",

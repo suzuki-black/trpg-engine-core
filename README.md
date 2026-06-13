@@ -17,7 +17,7 @@ It runs out of the box — **no API keys, no cloud, dependency-light** (Go stand
 - 🗣️ **Natural-language input with feedback** — actions are classified by keyword first, then by the LLM for kana/casual phrasing. Every turn shows how your action was read, and if nothing happened, it tells you why and what the current objective is.
 - 🎭 **AI NPCs with persistent personalities** — each NPC has a personality, tone, public goal, hidden secret, and an attitude that shifts one step at a time. NPCs return *dialogue + tone only*; the GM weaves it into the prose.
 - 🎲 **Deterministic D20 engine** — `roll + stat modifier vs DC`, with critical success/failure at 20/1. Fully unit-tested.
-- 📖 **Chapter-structured scenario with branching** — fixed skeleton, improvised details. Multiple routes (fight vs. negotiate) reach the same clear condition and lead to 3 endings.
+- 📖 **Data-driven, branching scenarios** — chapters, NPCs, progression rules, bonuses, boss, and endings are defined in JSON (no recompile). The engine is scenario-agnostic; load your own with `-scenario`. Fixed skeleton, improvised details; multiple routes (fight vs. negotiate) lead to 3 endings.
 - ⚔️ **Boss combat** — HP-based multi-round attack rolls, with bonuses wired to earlier choices (clues found / allies recruited make negotiation easier).
 - 💾 **Save & load** — full session state (player, NPC attitudes, chapter, flags, world, boss HP) to JSON, with named multi-slot saves and autosave on chapter transitions.
 - 🪶 **Dependency-light** — pure Go, a single static binary; the only direct dependency is `github.com/chzyer/readline` for CJK-aware terminal line editing.
@@ -42,6 +42,9 @@ go run ./cmd/trpg -model qwen2.5:7b -seed 4 -demo
 
 # No LLM? See the engine skeleton with the offline mock
 go run ./cmd/trpg -mock -seed 4 -demo
+
+# Play your own scenario (template: internal/scenario/scenarios/forgotten-shrine.json)
+go run ./cmd/trpg -scenario path/to/your-scenario.json
 ```
 
 In-session commands: type an action in Japanese, or `status` / `saves` (list slots) / `save [name]` / `load [name]` / `quit`. Saves live in `saves/`; chapters autosave to the `autosave` slot.
@@ -76,11 +79,11 @@ Covers D20 critical boundaries & difficulty mapping, the boss-combat loop throug
 
 - [x] **Non-Japanese output filter** — detects simplified-Chinese / foreign scripts / stray Latin words in GM & NPC output and regenerates in Japanese ([`internal/textqc`](internal/textqc/textqc.go), tunable via `-qc-retries`).
 - [x] **Multi-slot saves & autosave** — named save slots under `saves/`, listed by recency; autosaves on every chapter transition.
+- [x] **Externalized scenarios** — chapters, NPCs, progression rules, bonuses, boss, and endings live in JSON; the engine is scenario-agnostic and loads files via `-scenario` ([`internal/scenario`](internal/scenario/scenario.go), default embedded).
 
 Planned but **not yet implemented**:
 
 - [ ] **Tactical combat** — defend, item use, and NPC assists as combat options.
-- [ ] **Externalized scenarios** — define chapters/NPCs in JSON/YAML, decoupled from the engine.
 
 ## 📄 License
 
@@ -108,7 +111,7 @@ The bundled scenario *“The Light of the Forgotten Shrine”* and its NPCs are 
 - 🗣️ **自然言語入力＋フィードバック** — 行動はまずキーワードで、漏れたら（ひらがな・口語）LLMで意図分類。毎ターン「どう解釈したか」を表示し、何も起きなかった時は理由と今の目標を伝える。
 - 🎭 **人格が持続する AI NPC** — 性格・口調・表向きの目的・隠された秘密を持ち、態度は1段階ずつ変化。NPCは*セリフ＋トーンのみ*を返し、GMが地の文へ統合。
 - 🎲 **決定論的な D20 エンジン** — `出目＋ステータス修正 vs DC`、20/1でクリティカル成功/失敗。単体テスト済み。
-- 📖 **章構造＋分岐シナリオ** — 骨格は固定、細部は即興。戦闘/交渉など複数ルートが同じクリア条件に至り、3通りの結末へ。
+- 📖 **データ駆動の分岐シナリオ** — 章・NPC・進行ルール・ボーナス・ボス・エンディングを JSON で定義（再コンパイル不要）。エンジンはシナリオ非依存で、`-scenario` で自作も読み込み可能。骨格は固定・細部は即興、戦闘/交渉で3通りの結末へ。
 - ⚔️ **ボス戦** — HP制の複数回 attack 判定。手がかり収集・仲間加入などの過去の選択が交渉を有利にする補正を実装。
 - 💾 **セーブ＆ロード** — セッション全状態（プレイヤー/NPC態度/章/フラグ/世界/ボスHP）を JSON で保存。
 - 🪶 **依存は最小限** — ほぼ Go 標準ライブラリ。単一バイナリ。日本語対応の行編集に `github.com/chzyer/readline` のみ使用。
@@ -132,6 +135,9 @@ go run ./cmd/trpg -model qwen2.5:7b -seed 4 -demo
 
 # LLM 無しで骨格だけ確認
 go run ./cmd/trpg -mock -seed 4 -demo
+
+# 自作シナリオで遊ぶ（雛形: internal/scenario/scenarios/forgotten-shrine.json）
+go run ./cmd/trpg -scenario path/to/your-scenario.json
 ```
 
 対話コマンド：日本語で行動を入力、または `status` / `saves`（一覧） / `save [名前]` / `load [名前]` / `quit`。セーブは `saves/` に保存され、章進行ごとに `autosave` スロットへ自動保存されます。
@@ -166,6 +172,7 @@ D20のクリティカル境界・難易度マッピング、ボス戦の撃破�
 
 - [x] **非日本語フィルタ** — GM/NPC出力の簡体字・他言語スクリプト・ラテン語片を検知し、日本語で再生成（[`internal/textqc`](internal/textqc/textqc.go)、`-qc-retries` で調整可）。
 - [x] **マルチセーブ＆オートセーブ** — `saves/` に名前付きスロットで保存し新しい順に一覧表示。章進行ごとに自動保存。
+- [x] **シナリオの外部化** — 章・NPC・進行ルール・ボーナス・ボス・エンディングを JSON 化。エンジンはシナリオ非依存で `-scenario` で読み込み（[`internal/scenario`](internal/scenario/scenario.go)、既定は埋め込み）。
 
 予定はありますが**未実装**：
 

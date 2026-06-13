@@ -1,42 +1,88 @@
-// Package scenario は章構造・イベント・NPC人格テンプレートを保持する。
-// 設計: docs/05-scenario.md（シナリオ「忘れられた祠の灯」）,
+// Package scenario は章構造・イベント・NPC人格テンプレート・進行ルールを保持する。
+// 設計: docs/05-scenario.md（シナリオ「忘れられた祠の灯」）, docs/03-npc-templates.md
 //
-//	docs/03-npc-templates.md（NPC人格テンプレート）
-//
-// 章順序・クリア条件・骨格は固定。細部は GM/NPC=LLM が即興補完する。
+// シナリオは JSON で外部定義する（TODO#4）。進行ルール（どの行動でどのフラグが
+// 立つか）・難易度・ボーナス・ボス・エンディングまでデータ化したので、エンジンは
+// 特定シナリオに依存しない。既定シナリオはバイナリに埋め込んでいる。
 package scenario
 
-import "trpg-engine-core/internal/state"
+import (
+	_ "embed"
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"trpg-engine-core/internal/state"
+)
 
 // NPCTemplate は NPC 人格テンプレート。docs/03-npc-templates.md §3.2
 type NPCTemplate struct {
-	ID           string
-	Name         string
-	Role         string
-	Personality  string
-	Tone         string
-	PublicGoal   string
-	HiddenGoal   string // 通常プレイヤーには明かさない
-	InitAttitude state.Attitude
+	ID           string         `json:"id"`
+	Name         string         `json:"name"`
+	Role         string         `json:"role"`
+	Personality  string         `json:"personality"`
+	Tone         string         `json:"tone"`
+	PublicGoal   string         `json:"public_goal"`
+	HiddenGoal   string         `json:"hidden_goal"` // 通常プレイヤーには明かさない
+	InitAttitude state.Attitude `json:"init_attitude"`
 }
 
-// Chapter は章。順序とクリア条件は固定。docs/05-scenario.md §5.4
+// Rule は「行動と判定結果に応じてフラグを立てる／ダメージを与える」進行ルール。
+// 章スキップや誤進行を避けるため、条件を満たした時のみ作用する。
+type Rule struct {
+	On          string   `json:"on"`           // talk|search|attack|move|any（既定 any）
+	Outcome     string   `json:"outcome"`      // success|critsuccess|fail|critfail|any（既定 any）
+	RequiresAll []string `json:"requires_all"` // 入力に全て含まれること
+	RequiresAny []string `json:"requires_any"` // 入力にいずれか含まれること
+	ExcludesAny []string `json:"excludes_any"` // 入力にいずれも含まれないこと
+	Sets        []string `json:"sets"`         // 立てるフラグ
+	Damage      int      `json:"damage"`       // プレイヤーへのライフ減少
+}
+
+// Bonus は特定フラグ保持時の判定補正（過去の選択が後の判定を有利にする）。
+type Bonus struct {
+	Flag     string `json:"flag"`     // このフラグが立っていると…
+	On       string `json:"on"`       // この行動種別の判定に対して
+	Ease     bool   `json:"ease"`     // 難易度を1段階緩和する
+	Modifier int    `json:"modifier"` // 判定値に加える修正
+}
+
+// Boss は戦闘ルート用のボス定義（HP制）。撃破で DefeatSets のフラグが立つ。
+type Boss struct {
+	Name       string   `json:"name"`
+	HP         int      `json:"hp"`
+	DefeatSets []string `json:"defeat_sets"`
+}
+
+// Chapter は章。順序とクリア条件は固定。進行ルールもデータで持つ。
 type Chapter struct {
-	ID           string
-	Title        string
-	Goal         string
-	SceneSummary string
-	NPCsPresent  []string // この章に登場する NPC ID
-	ClearFlag    string   // このフラグが立つと次章へ進める
-	ClearHint    string   // GM に渡すクリア条件の説明
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Goal         string   `json:"goal"`
+	SceneSummary string   `json:"scene_summary"`
+	NPCsPresent  []string `json:"npcs_present"`
+	ClearFlag    string   `json:"clear_flag"` // このフラグが立つと次章へ進む
+	ClearHint    string   `json:"clear_hint"` // GM に渡すクリア条件の説明
+	Difficulty   string   `json:"difficulty"` // easy|normal|hard|very_hard（既定 normal）
+	Rules        []Rule   `json:"rules"`
+	Bonuses      []Bonus  `json:"bonuses"`
+	Boss         *Boss    `json:"boss"`
 }
 
-// Scenario は章リストと NPC テンプレートを保持する。
+// Ending は最終分岐。requires を満たす最初のものが採用される。
+type Ending struct {
+	RequiresAll []string `json:"requires_all"`
+	RequiresAny []string `json:"requires_any"`
+	Text        string   `json:"text"`
+}
+
+// Scenario は章リスト・NPC・エンディングを保持する。
 type Scenario struct {
-	Title    string
-	World    string
-	Chapters []Chapter
-	NPCs     map[string]NPCTemplate
+	Title    string                 `json:"title"`
+	World    string                 `json:"world"`
+	Chapters []Chapter              `json:"chapters"`
+	NPCs     map[string]NPCTemplate `json:"npcs"`
+	Endings  []Ending               `json:"endings"`
 }
 
 func (s *Scenario) Chapter(id string) *Chapter {
@@ -57,80 +103,70 @@ func (s *Scenario) NextChapter(id string) *Chapter {
 	return nil
 }
 
-// ForgottenShrine は実例シナリオ「忘れられた祠の灯」。docs/05-scenario.md
-func ForgottenShrine() *Scenario {
-	return &Scenario{
-		Title: "忘れられた祠の灯",
-		World: "中世風ファンタジー。深い森のふもとの小さな村『リンデン』と、" +
-			"近くの古い遺跡『忘れられた祠』。夜ごと祠から青白い光が漏れ、村人は災いを恐れている。",
-		NPCs: map[string]NPCTemplate{
-			"karasu": {
-				ID: "karasu", Name: "カラス", Role: "街の情報屋。酒場を根城にする",
-				Personality:  "抜け目なく、皮肉屋。だが約束は守る",
-				Tone:         "ぶっきらぼうで、軽口を挟む",
-				PublicGoal:   "情報を売って日銭を稼ぐ",
-				HiddenGoal:   "遺跡に眠る品の価値を知っており、プレイヤーより先に在処を確かめたい",
-				InitAttitude: state.Neutral,
-			},
-			"mireille": {
-				ID: "mireille", Name: "ミレーユ", Role: "諸国を巡る旅の僧侶",
-				Personality:  "穏やかで思いやり深いが、芯は強い",
-				Tone:         "丁寧で柔らかい",
-				PublicGoal:   "困っている人々を助け、遺跡に巣食う災いを鎮めたい",
-				HiddenGoal:   "かつてこの遺跡で仲間を失っており、その真相を確かめたい私情がある",
-				InitAttitude: state.Friendly,
-			},
-			"gorz": {
-				ID: "gorz", Name: "ゴルツ", Role: "流れの傭兵。見た目はならず者だが根は善人",
-				Personality:  "粗暴に見えて面倒見がよい。情に弱い",
-				Tone:         "乱暴で短気だが、時折優しさが滲む",
-				PublicGoal:   "金になる依頼を探している",
-				HiddenGoal:   "故郷の村を救う金を貯めており、本当は危険な仕事を避けたい",
-				InitAttitude: state.Neutral,
-			},
-		},
-		Chapters: []Chapter{
-			{
-				ID: "ch01", Title: "村での依頼",
-				Goal:         "依頼を受注し、祠についての情報を集める",
-				SceneSummary: "夕暮れのリンデン村。村長の家と、薄暗い酒場。情報屋カラスがいる。",
-				NPCsPresent:  []string{"karasu", "mireille"},
-				ClearFlag:    "location_known",
-				ClearHint:    "依頼を受諾し、情報屋カラスから祠の場所を聞き出せばクリア。",
-			},
-			{
-				ID: "ch02", Title: "遺跡への道中",
-				Goal:         "祠まで無事にたどり着く",
-				SceneSummary: "霧の立ちこめる森の道。崩れかけた橋。ならず者ゴルツと遭遇しうる。",
-				NPCsPresent:  []string{"gorz"},
-				ClearFlag:    "reached_shrine",
-				ClearHint:    "森を抜け、祠の入口に到達すればクリア。戦う/迂回する/ゴルツを仲間にする等で分岐。",
-			},
-			{
-				ID: "ch03", Title: "遺跡内部の探索",
-				Goal:         "祠の最奥へ進む手段を見つける",
-				SceneSummary: "苔むした石の広間。床に溝、壁に紋章。罠と仕掛けがある。",
-				NPCsPresent:  []string{},
-				ClearFlag:    "inner_door_opened",
-				ClearHint:    "罠を抜け、紋章の謎を解いて最奥の扉を開ければクリア。手がかり(clue_found)も拾える。",
-			},
-			{
-				ID: "ch04", Title: "対決または交渉",
-				Goal:         "異変の元凶（歪んだ精霊）と決着をつける",
-				SceneSummary: "祠の最奥。青白い光を放つ、歪んだ精霊が漂う。嘆きの声が響く。",
-				NPCsPresent:  []string{},
-				ClearFlag:    "boss_resolved",
-				ClearHint: "精霊と決着。戦闘(spirit_defeated)または交渉(spirit_soothed)。" +
-					"clue_found があれば説得が1段階容易、mireille_ally がいれば交渉に有利。",
-			},
-			{
-				ID: "ch05", Title: "結末 — 村への帰還",
-				Goal:         "結果を村に持ち帰り、物語を締める",
-				SceneSummary: "夜明けのリンデン村。村長が結果を待っている。",
-				NPCsPresent:  []string{},
-				ClearFlag:    "ending_reached",
-				ClearHint:    "村長へ報告し、真実をどこまで語るか選べばエンディング。",
-			},
-		},
+//go:embed scenarios/forgotten-shrine.json
+var defaultJSON []byte
+
+// LoadJSON は JSON バイト列から Scenario を構築・検証する。
+func LoadJSON(b []byte) (*Scenario, error) {
+	var s Scenario
+	if err := json.Unmarshal(b, &s); err != nil {
+		return nil, fmt.Errorf("シナリオの解析に失敗: %w", err)
 	}
+	// NPC の ID をマップのキーから補完する（JSON側で省略可能にする）。
+	for id, npc := range s.NPCs {
+		if npc.ID == "" {
+			npc.ID = id
+			s.NPCs[id] = npc
+		}
+	}
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// Load はファイルパスから Scenario を読み込む。
+func Load(path string) (*Scenario, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("シナリオファイルの読み込みに失敗: %w", err)
+	}
+	return LoadJSON(b)
+}
+
+// validate は最低限の整合性を検査する。
+func (s *Scenario) validate() error {
+	if len(s.Chapters) == 0 {
+		return fmt.Errorf("章が定義されていない")
+	}
+	for _, ch := range s.Chapters {
+		if ch.ID == "" {
+			return fmt.Errorf("章IDが空の章がある")
+		}
+		if ch.ClearFlag == "" {
+			return fmt.Errorf("章 %s に clear_flag がない", ch.ID)
+		}
+		for _, id := range ch.NPCsPresent {
+			if _, ok := s.NPCs[id]; !ok {
+				return fmt.Errorf("章 %s が未定義のNPC %q を参照している", ch.ID, id)
+			}
+		}
+		if ch.Boss != nil && len(ch.Boss.DefeatSets) == 0 {
+			return fmt.Errorf("章 %s のボスに defeat_sets がない", ch.ID)
+		}
+	}
+	if len(s.Endings) == 0 {
+		return fmt.Errorf("エンディングが定義されていない")
+	}
+	return nil
+}
+
+// ForgottenShrine は既定シナリオ「忘れられた祠の灯」（埋め込みJSONを解析）。
+// 埋め込みデータは信頼できるため、壊れていればパニックさせる。
+func ForgottenShrine() *Scenario {
+	s, err := LoadJSON(defaultJSON)
+	if err != nil {
+		panic("既定シナリオの読み込みに失敗: " + err.Error())
+	}
+	return s
 }

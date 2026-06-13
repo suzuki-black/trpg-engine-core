@@ -100,22 +100,34 @@ func classify(input string) (string, string, bool) {
 	return action, stat, true
 }
 
-// difficultyFor はシナリオ管理の責務として難易度を決める。docs/01-architecture.md §1.6
-// docs/05-scenario.md の章ごとの想定難易度を反映。交渉は手がかり/同行で補正。
+// difficultyFor は章データの難易度に、保持フラグによる緩和ボーナスを適用して返す。
+// docs/01-architecture.md §1.6
 func (e *Engine) difficultyFor(chapterID, actionType string) string {
-	base := map[string]string{
-		"ch01": "normal", "ch02": "normal", "ch03": "hard", "ch04": "hard", "ch05": "normal",
-	}[chapterID]
+	ch := e.Scn.Chapter(chapterID)
+	if ch == nil {
+		return "normal"
+	}
+	base := ch.Difficulty
 	if base == "" {
 		base = "normal"
 	}
-	// 第4章・交渉ルートの成功補正。docs/05-scenario.md §5.4 第4章
-	if chapterID == "ch04" && actionType == "talk" {
-		if e.Sess.Flag("clue_found") {
+	for _, b := range ch.Bonuses {
+		if b.Ease && b.On == actionType && e.Sess.Flag(b.Flag) {
 			base = ease(base) // 1段階容易に
 		}
 	}
 	return base
+}
+
+// bonusModifier は章データのフラグ依存ボーナス（判定値修正）を合算する。
+func (e *Engine) bonusModifier(ch *scenario.Chapter, actionType string) int {
+	mod := 0
+	for _, b := range ch.Bonuses {
+		if b.Modifier != 0 && b.On == actionType && e.Sess.Flag(b.Flag) {
+			mod += b.Modifier
+		}
+	}
+	return mod
 }
 
 func ease(rank string) string {
@@ -153,14 +165,8 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		if usedStat != "" {
 			mod = e.Sess.Player.Modifier(usedStat) // プレイヤー状態管理が提供
 		}
-		// 第4章の同行ボーナス。docs/05-scenario.md
-		// 交渉はミレーユ同行で +2、戦闘はゴルツ加勢で +2。
-		if ch.ID == "ch04" && actionType == "talk" && e.Sess.Flag("mireille_ally") {
-			mod += 2
-		}
-		if ch.ID == "ch04" && actionType == "attack" && e.Sess.Flag("gorz_ally") {
-			mod += 2
-		}
+		// 章データのフラグ依存ボーナス（同行・手がかり等）。docs/05-scenario.md
+		mod += e.bonusModifier(ch, actionType)
 		req := dice.CheckRequest{
 			ActionType:   actionType,
 			UsedStat:     usedStat,
@@ -172,10 +178,10 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		res.Check = check
 	}
 
-	// 2.5) 第4章・戦闘ルート: attack はボスHPを削る複数回戦闘として解決する。
+	// 2.5) 戦闘ルート: ボスのいる章で attack はボスHPを削る複数回戦闘として解決する。
 	var notes []string
-	if ch.ID == "ch04" && actionType == "attack" && check != nil {
-		note, log := e.resolveCombat(check)
+	if ch.Boss != nil && actionType == "attack" && check != nil {
+		note, log := e.resolveCombat(ch, check)
 		if note != "" {
 			notes = append(notes, note)
 		}
@@ -270,70 +276,71 @@ func (e *Engine) pickNPC(ch *scenario.Chapter, input string) string {
 	return ""
 }
 
-// applyProgress は行動と判定結果からフラグを進める（骨格は固定、結果のみ反映）。
+// applyProgress は章データの進行ルールを評価し、合致したルールの効果（フラグ／
+// ダメージ）を適用する。戦闘(attack)はボスのいる章では resolveCombat が担当する。
 func (e *Engine) applyProgress(ch *scenario.Chapter, actionType, input string, check *dice.CheckResult) {
-	ok := check != nil && (check.Outcome == dice.Success || check.Outcome == dice.CriticalSuccess)
-	crit := check != nil && check.Outcome == dice.CriticalFailure
-
-	switch ch.ID {
-	case "ch01":
-		if actionType == "talk" && ok {
-			e.Sess.SetFlag("quest_accepted", true)
-			e.Sess.SetFlag("location_known", true)
+	for _, r := range ch.Rules {
+		// ボス章の attack はルールではなく戦闘で解決するため、ここでは無視する。
+		if ch.Boss != nil && r.On == "attack" {
+			continue
 		}
-		if strings.Contains(input, "ミレーユ") && strings.Contains(input, "同行") {
-			e.Sess.SetFlag("mireille_ally", true)
+		if !ruleMatches(r, actionType, input, check) {
+			continue
 		}
-	case "ch02":
-		if strings.Contains(input, "ゴルツ") && actionType == "talk" && ok {
-			e.Sess.SetFlag("gorz_ally", true)
+		for _, f := range r.Sets {
+			e.Sess.SetFlag(f, true)
 		}
-		if crit { // 道中の失敗は消耗
-			e.Sess.DamageLife(2)
-		}
-		// 祠への到達は「前進する(move)」か「戦って突破(attack成功)」で確定する。
-		// 探索(search)や会話だけでは勝手に進まない（章スキップ防止）。
-		if actionType == "move" || (actionType == "attack" && ok) {
-			e.Sess.SetFlag("reached_shrine", true)
-		}
-	case "ch03":
-		if actionType == "search" && ok {
-			e.Sess.SetFlag("clue_found", true)
-			e.Sess.SetFlag("inner_door_opened", true)
-		}
-		if crit {
-			e.Sess.DamageLife(2) // 罠作動
-		}
-	case "ch04":
-		// 交渉ルートは一撃で鎮める。戦闘ルート(attack)は resolveCombat が担当するため
-		// ここでは扱わない。
-		if actionType == "talk" && ok {
-			e.Sess.SetFlag("spirit_soothed", true)
-			e.Sess.SetFlag("boss_resolved", true)
-		}
-	case "ch05":
-		// 報告すればエンディング。真実を語ったか／伏せたかをフラグ化する。
-		reported := containsAny(input, "真実", "語", "報告", "伝え", "話")
-		if reported {
-			// 「隠す/伏せる」系は伏匿。ただし「隠さず/包み隠さず/隠さない」は否定＝真実を話す。
-			hiding := containsAny(input, "伏せ", "隠し", "隠す", "黙", "嘘", "偽")
-			if strings.Contains(input, "隠さ") { // 隠さず・隠さない 等
-				hiding = false
-			}
-			if !hiding {
-				e.Sess.SetFlag("told_truth", true)
-			}
-			e.Sess.SetFlag("ending_reached", true)
+		if r.Damage > 0 {
+			e.Sess.DamageLife(r.Damage)
 		}
 	}
 }
 
-// resolveCombat は第4章の戦闘1ラウンドを解決する。HP制で複数ターン継続する。
+// ruleMatches は進行ルールが現在の行動・入力・判定結果に合致するか判定する。
+func ruleMatches(r scenario.Rule, actionType, input string, check *dice.CheckResult) bool {
+	if r.On != "" && r.On != "any" && r.On != actionType {
+		return false
+	}
+	if !outcomeMatches(r.Outcome, check) {
+		return false
+	}
+	for _, s := range r.RequiresAll {
+		if !strings.Contains(input, s) {
+			return false
+		}
+	}
+	if len(r.RequiresAny) > 0 && !containsAny(input, r.RequiresAny...) {
+		return false
+	}
+	if len(r.ExcludesAny) > 0 && containsAny(input, r.ExcludesAny...) {
+		return false
+	}
+	return true
+}
+
+func outcomeMatches(want string, check *dice.CheckResult) bool {
+	switch want {
+	case "", "any":
+		return true
+	case "success":
+		return check != nil && (check.Outcome == dice.Success || check.Outcome == dice.CriticalSuccess)
+	case "critsuccess":
+		return check != nil && check.Outcome == dice.CriticalSuccess
+	case "fail":
+		return check != nil && (check.Outcome == dice.Failure || check.Outcome == dice.CriticalFailure)
+	case "critfail":
+		return check != nil && check.Outcome == dice.CriticalFailure
+	}
+	return false
+}
+
+// resolveCombat はボス戦の1ラウンドを解決する。HP制で複数ターン継続する。
+// ボス定義は章データから来る（シナリオ非依存）。
 // 戻り値: note（GMへ渡す物語的特記。数値なし）, log（CLI用の数値ログ）。
-func (e *Engine) resolveCombat(check *dice.CheckResult) (note, log string) {
+func (e *Engine) resolveCombat(ch *scenario.Chapter, check *dice.CheckResult) (note, log string) {
 	b := &e.Sess.Boss
-	if !b.Active { // 念のための保険（通常は ensureNPCs で初期化済み）
-		*b = state.Boss{Name: "歪んだ精霊", HP: 12, MaxHP: 12, Active: true}
+	if !b.Active && ch.Boss != nil { // 念のための保険（通常は ensureNPCs で初期化済み）
+		*b = state.Boss{Name: ch.Boss.Name, HP: ch.Boss.HP, MaxHP: ch.Boss.HP, Active: true}
 	}
 	atkMod := e.Sess.Player.Modifier("attack")
 	bossBefore := b.HP
@@ -341,31 +348,33 @@ func (e *Engine) resolveCombat(check *dice.CheckResult) (note, log string) {
 
 	switch check.Outcome {
 	case dice.CriticalSuccess:
-		dmg := (3 + atkMod) * 2
-		b.HP -= dmg
-		note = "精霊の核に渾身の一撃が突き刺さり、青白い光が激しく明滅した。"
+		b.HP -= (3 + atkMod) * 2
+		note = "渾身の一撃が" + b.Name + "を大きくよろめかせた。"
 	case dice.Success:
 		dmg := 3 + atkMod
 		if dmg < 1 {
 			dmg = 1
 		}
 		b.HP -= dmg
-		note = "精霊に確かな手応えの一撃が入り、嘆きの光が一段弱まった。"
+		note = b.Name + "に確かな手応えの一撃が入り、その勢いが一段弱まった。"
 	case dice.Failure:
 		e.Sess.DamageLife(2)
-		note = "攻撃は空を切り、精霊の冷たい波動が反撃となって体を打った。"
+		note = "攻撃は空を切り、" + b.Name + "の反撃を受けてしまった。"
 	case dice.CriticalFailure:
 		e.Sess.DamageLife(4)
-		note = "大きく体勢を崩したところへ、精霊の激しい奔流をまともに浴びてしまった。"
+		note = "大きく体勢を崩したところへ、" + b.Name + "の強烈な反撃をまともに浴びた。"
 	}
 	if b.HP < 0 {
 		b.HP = 0
 	}
 
 	if b.HP == 0 {
-		e.Sess.SetFlag("spirit_defeated", true)
-		e.Sess.SetFlag("boss_resolved", true)
-		note = "精霊はついに力尽き、崩れるように青白い光が薄れていく。決着のときだ。"
+		if ch.Boss != nil {
+			for _, f := range ch.Boss.DefeatSets {
+				e.Sess.SetFlag(f, true)
+			}
+		}
+		note = b.Name + "はついに力尽き、崩れ落ちようとしている。決着のときだ。"
 	} else if e.Sess.Player.Stats["life"] == 0 {
 		// プレイヤー敗北。撤退扱いにし、戦闘を継続可能な状態に戻す（ボスは未撃破）。
 		note = "意識が遠のき、あなたはその場に膝をつく。これ以上は戦えそうにない。"
@@ -377,17 +386,33 @@ func (e *Engine) resolveCombat(check *dice.CheckResult) (note, log string) {
 	return note, log
 }
 
-// computeEnding は最終フラグからエンディングを決める。docs/05-scenario.md §5.4 第5章
+// computeEnding は章データのエンディング定義を順に評価し、最初に条件を満たすものを返す。
 func (e *Engine) computeEnding() string {
-	s := e.Sess
-	switch {
-	case s.Flag("spirit_soothed") && s.Flag("told_truth"):
-		return "【成功（最良）】交渉で精霊を鎮め、村に真実を語った。村は祠を弔いの場として敬い、平穏が戻った。"
-	case s.Flag("spirit_soothed") || s.Flag("spirit_defeated"):
-		return "【部分成功】異変は止んだが、戦いの傷あと、あるいは伏せた真実が、どこか後味を残した。"
-	default:
-		return "【失敗】青白い光は消えず、村には不安が残った。だが再び挑む余地はある。"
+	for _, end := range e.Scn.Endings {
+		ok := true
+		for _, f := range end.RequiresAll {
+			if !e.Sess.Flag(f) {
+				ok = false
+				break
+			}
+		}
+		if ok && len(end.RequiresAny) > 0 && !flagAny(e.Sess, end.RequiresAny) {
+			ok = false
+		}
+		if ok {
+			return end.Text
+		}
 	}
+	return "（物語は静かに幕を閉じた。）"
+}
+
+func flagAny(s *state.Session, flags []string) bool {
+	for _, f := range flags {
+		if s.Flag(f) {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Engine) ensureNPCs(ch *scenario.Chapter) {
@@ -396,9 +421,9 @@ func (e *Engine) ensureNPCs(ch *scenario.Chapter) {
 			e.Sess.NPCs[id] = &state.NPCState{ID: id, Attitude: e.Scn.NPCs[id].InitAttitude}
 		}
 	}
-	// 第4章に入ったらボス（戦闘ルート用）を初期化する。docs/05-scenario.md §5.4
-	if ch.ID == "ch04" && !e.Sess.Boss.Active {
-		e.Sess.Boss = state.Boss{Name: "歪んだ精霊", HP: 12, MaxHP: 12, Active: true}
+	// ボスのいる章に入ったら戦闘用ボスを初期化する（章データ駆動）。
+	if ch.Boss != nil && !e.Sess.Boss.Active {
+		e.Sess.Boss = state.Boss{Name: ch.Boss.Name, HP: ch.Boss.HP, MaxHP: ch.Boss.HP, Active: true}
 	}
 }
 

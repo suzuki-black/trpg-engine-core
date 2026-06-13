@@ -1,0 +1,117 @@
+{
+  "title": "忘れられた祠の灯",
+  "world": "中世風ファンタジー。深い森のふもとの小さな村『リンデン』と、近くの古い遺跡『忘れられた祠』。夜ごと祠から青白い光が漏れ、村人は災いを恐れている。",
+  "npcs": {
+    "karasu": {
+      "name": "カラス",
+      "role": "街の情報屋。酒場を根城にする",
+      "personality": "抜け目なく、皮肉屋。だが約束は守る",
+      "tone": "ぶっきらぼうで、軽口を挟む",
+      "public_goal": "情報を売って日銭を稼ぐ",
+      "hidden_goal": "遺跡に眠る品の価値を知っており、プレイヤーより先に在処を確かめたい",
+      "init_attitude": "neutral"
+    },
+    "mireille": {
+      "name": "ミレーユ",
+      "role": "諸国を巡る旅の僧侶",
+      "personality": "穏やかで思いやり深いが、芯は強い",
+      "tone": "丁寧で柔らかい",
+      "public_goal": "困っている人々を助け、遺跡に巣食う災いを鎮めたい",
+      "hidden_goal": "かつてこの遺跡で仲間を失っており、その真相を確かめたい私情がある",
+      "init_attitude": "friendly"
+    },
+    "gorz": {
+      "name": "ゴルツ",
+      "role": "流れの傭兵。見た目はならず者だが根は善人",
+      "personality": "粗暴に見えて面倒見がよい。情に弱い",
+      "tone": "乱暴で短気だが、時折優しさが滲む",
+      "public_goal": "金になる依頼を探している",
+      "hidden_goal": "故郷の村を救う金を貯めており、本当は危険な仕事を避けたい",
+      "init_attitude": "neutral"
+    }
+  },
+  "chapters": [
+    {
+      "id": "ch01",
+      "title": "村での依頼",
+      "goal": "依頼を受注し、祠についての情報を集める",
+      "scene_summary": "夕暮れのリンデン村。村長の家と、薄暗い酒場。情報屋カラスがいる。",
+      "npcs_present": ["karasu", "mireille"],
+      "clear_flag": "location_known",
+      "clear_hint": "依頼を受諾し、情報屋カラスから祠の場所を聞き出せばクリア。",
+      "difficulty": "normal",
+      "rules": [
+        { "on": "talk", "outcome": "success", "sets": ["quest_accepted", "location_known"] },
+        { "on": "any", "requires_all": ["ミレーユ", "同行"], "sets": ["mireille_ally"] }
+      ]
+    },
+    {
+      "id": "ch02",
+      "title": "遺跡への道中",
+      "goal": "祠まで無事にたどり着く",
+      "scene_summary": "霧の立ちこめる森の道。崩れかけた橋。ならず者ゴルツと遭遇しうる。",
+      "npcs_present": ["gorz"],
+      "clear_flag": "reached_shrine",
+      "clear_hint": "森を抜け、祠の入口に到達すればクリア。戦う/迂回する/ゴルツを仲間にする等で分岐。",
+      "difficulty": "normal",
+      "rules": [
+        { "on": "talk", "outcome": "success", "requires_all": ["ゴルツ"], "sets": ["gorz_ally"] },
+        { "on": "move", "sets": ["reached_shrine"] },
+        { "on": "attack", "outcome": "success", "sets": ["reached_shrine"] },
+        { "on": "any", "outcome": "critfail", "damage": 2 }
+      ]
+    },
+    {
+      "id": "ch03",
+      "title": "遺跡内部の探索",
+      "goal": "祠の最奥へ進む手段を見つける",
+      "scene_summary": "苔むした石の広間。床に溝、壁に紋章。罠と仕掛けがある。",
+      "npcs_present": [],
+      "clear_flag": "inner_door_opened",
+      "clear_hint": "罠を抜け、紋章の謎を解いて最奥の扉を開ければクリア。手がかりも拾える。",
+      "difficulty": "hard",
+      "rules": [
+        { "on": "search", "outcome": "success", "sets": ["clue_found", "inner_door_opened"] },
+        { "on": "any", "outcome": "critfail", "damage": 2 }
+      ]
+    },
+    {
+      "id": "ch04",
+      "title": "対決または交渉",
+      "goal": "異変の元凶（歪んだ精霊）と決着をつける",
+      "scene_summary": "祠の最奥。青白い光を放つ、歪んだ精霊が漂う。嘆きの声が響く。",
+      "npcs_present": [],
+      "clear_flag": "boss_resolved",
+      "clear_hint": "精霊と決着。戦って倒すか、説得して鎮める。手がかりがあれば説得が有利、ミレーユ同行でも有利。",
+      "difficulty": "hard",
+      "boss": { "name": "歪んだ精霊", "hp": 12, "defeat_sets": ["spirit_defeated", "boss_resolved"] },
+      "bonuses": [
+        { "flag": "clue_found", "on": "talk", "ease": true },
+        { "flag": "mireille_ally", "on": "talk", "modifier": 2 },
+        { "flag": "gorz_ally", "on": "attack", "modifier": 2 }
+      ],
+      "rules": [
+        { "on": "talk", "outcome": "success", "sets": ["spirit_soothed", "boss_resolved"] }
+      ]
+    },
+    {
+      "id": "ch05",
+      "title": "結末 — 村への帰還",
+      "goal": "結果を村に持ち帰り、物語を締める",
+      "scene_summary": "夜明けのリンデン村。村長が結果を待っている。",
+      "npcs_present": [],
+      "clear_flag": "ending_reached",
+      "clear_hint": "村長へ報告し、真実をどこまで語るか選べばエンディング。",
+      "difficulty": "normal",
+      "rules": [
+        { "on": "any", "requires_any": ["真実", "語", "報告", "伝え", "話"], "sets": ["ending_reached"] },
+        { "on": "any", "requires_any": ["真実", "語", "報告", "伝え", "話"], "excludes_any": ["伏せ", "隠し", "隠す", "黙", "嘘", "偽"], "sets": ["told_truth"] }
+      ]
+    }
+  ],
+  "endings": [
+    { "requires_all": ["spirit_soothed", "told_truth"], "text": "【成功（最良）】交渉で精霊を鎮め、村に真実を語った。村は祠を弔いの場として敬い、平穏が戻った。" },
+    { "requires_any": ["spirit_soothed", "spirit_defeated"], "text": "【部分成功】異変は止んだが、戦いの傷あと、あるいは伏せた真実が、どこか後味を残した。" },
+    { "text": "【失敗】青白い光は消えず、村には不安が残った。だが再び挑む余地はある。" }
+  ]
+}
