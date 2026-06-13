@@ -43,8 +43,9 @@ go run ./cmd/trpg -model qwen2.5:7b -seed 4 -demo
 # No LLM? See the engine skeleton with the offline mock
 go run ./cmd/trpg -mock -seed 4 -demo
 
-# Play your own scenario (template: internal/scenario/scenarios/forgotten-shrine.json)
-go run ./cmd/trpg -scenario path/to/your-scenario.json
+# Play a different scenario — a sci-fi one ships as an example
+go run ./cmd/trpg -scenario scenarios/orbital-amatsu.json
+# (write your own using internal/scenario/scenarios/forgotten-shrine.json as a template)
 ```
 
 In-session commands: type an action in Japanese, or `status` / `saves` (list slots) / `save [name]` / `load [name]` / `quit`. Saves live in `saves/`; chapters autosave to the `autosave` slot.
@@ -136,8 +137,9 @@ go run ./cmd/trpg -model qwen2.5:7b -seed 4 -demo
 # LLM 無しで骨格だけ確認
 go run ./cmd/trpg -mock -seed 4 -demo
 
-# 自作シナリオで遊ぶ（雛形: internal/scenario/scenarios/forgotten-shrine.json）
-go run ./cmd/trpg -scenario path/to/your-scenario.json
+# 別シナリオで遊ぶ（SF版を同梱）
+go run ./cmd/trpg -scenario scenarios/orbital-amatsu.json
+# （雛形は internal/scenario/scenarios/forgotten-shrine.json を参照）
 ```
 
 対話コマンド：日本語で行動を入力、または `status` / `saves`（一覧） / `save [名前]` / `load [名前]` / `quit`。セーブは `saves/` に保存され、章進行ごとに `autosave` スロットへ自動保存されます。

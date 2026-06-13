@@ -143,15 +143,33 @@ func main() {
 		scn = scenario.ForgottenShrine()
 	}
 	sess := state.NewSession()
+	// 既定のプレイヤー・世界状態（シナリオに start があれば上書き）。
 	sess.Player = state.PlayerCharacter{
 		Name:      "アルド",
 		Class:     "戦士",
 		Stats:     map[string]int{"luck": 12, "attack": 14, "life": 20},
 		Inventory: []string{"たいまつ", "ロープ", "回復薬"},
 	}
+	sess.World = state.World{TimeOfDay: "夕", Weather: "曇り", Alertness: "低", Ambient: "酒場のざわめき、薪の匂い"}
+	if st := scn.Start; st != nil {
+		if st.PlayerName != "" {
+			sess.Player.Name = st.PlayerName
+		}
+		if st.PlayerClass != "" {
+			sess.Player.Class = st.PlayerClass
+		}
+		if len(st.Stats) > 0 {
+			sess.Player.Stats = st.Stats
+		}
+		if st.Inventory != nil {
+			sess.Player.Inventory = st.Inventory
+		}
+		if (st.World != state.World{}) {
+			sess.World = st.World
+		}
+	}
 	sess.ChapterID = scn.Chapters[0].ID
 	sess.SceneSummary = scn.Chapters[0].SceneSummary
-	sess.World = state.World{TimeOfDay: "夕", Weather: "曇り", Alertness: "低", Ambient: "酒場のざわめき、薪の匂い"}
 
 	eng := engine.New(scn, sess, rng, gm.New(client, *qcRetries), npc.New(client, *qcRetries))
 	// 実 LLM（Ollama）利用時は、キーワードで判定できない入力（かな書き・口語）を

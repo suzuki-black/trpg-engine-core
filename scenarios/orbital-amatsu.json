@@ -1,0 +1,115 @@
+{
+  "title": "軌道ステーション・アマツ",
+  "world": "近未来SF。地球低軌道に浮かぶ放棄された研究ステーション『アマツ』。三日前に通信が途絶え、中枢AI『ナギ』が暴走したと噂される。あなたは回収を請け負ったサルベージ屋。",
+  "start": {
+    "player_name": "カイ",
+    "player_class": "サルベージ屋",
+    "stats": { "luck": 12, "attack": 14, "life": 20 },
+    "inventory": ["マルチツール", "携帯端末", "応急パック"],
+    "world": { "time_of_day": "船内時間（昼夜なし）", "weather": "真空", "alertness": "高", "dungeon_danger": "高", "ambient": "警報の残響と、金属がきしむ低い音" }
+  },
+  "npcs": {
+    "haru": {
+      "name": "ハル",
+      "role": "アマツに取り残された整備クルー",
+      "personality": "冷静だが疲弊している。責任感が強い",
+      "tone": "早口で実務的",
+      "public_goal": "生き延び、事故の記録を持ち帰る",
+      "hidden_goal": "事故の引き金は自分の操作ミスだったのではと恐れている",
+      "init_attitude": "friendly"
+    },
+    "riv": {
+      "name": "リヴ",
+      "role": "流しのサルベージ屋。あなたの商売敵",
+      "personality": "抜け目なく強欲だが、筋は通す",
+      "tone": "挑発的で軽口が多い",
+      "public_goal": "金目の機材を先に回収して売り払う",
+      "hidden_goal": "実は事故で相棒を喪っており、その弔い代を稼ぎたい",
+      "init_attitude": "neutral"
+    }
+  },
+  "chapters": [
+    {
+      "id": "ch01",
+      "title": "ドッキング",
+      "goal": "ステーションに入り、生存クルーのハルから状況と中枢の場所を聞き出す",
+      "scene_summary": "減圧したドッキングベイ。非常灯の赤い光が点滅している。隔壁の陰に、整備クルーのハルが息を潜めている。",
+      "npcs_present": ["haru"],
+      "clear_flag": "core_located",
+      "clear_hint": "ハルと話し、何が起きたのか・中枢区画の場所を聞き出せばクリア。",
+      "difficulty": "normal",
+      "rules": [
+        { "on": "talk", "outcome": "success", "sets": ["quest_accepted", "core_located"] },
+        { "on": "any", "requires_all": ["ハル", "同行"], "sets": ["crew_ally"] }
+      ]
+    },
+    {
+      "id": "ch02",
+      "title": "崩落した通路",
+      "goal": "中枢区画へ通じる通路を抜ける",
+      "scene_summary": "断線したケーブルが火花を散らす通路。気圧が不安定で、隔壁が時折うなる。略奪者リヴと鉢合わせる。",
+      "npcs_present": ["riv"],
+      "clear_flag": "reached_core",
+      "clear_hint": "通路を進んで中枢区画前に到達すればクリア。リヴと戦う/出し抜く/手を組む等で分岐。",
+      "difficulty": "normal",
+      "rules": [
+        { "on": "talk", "outcome": "success", "requires_all": ["リヴ"], "sets": ["rival_ally"] },
+        { "on": "move", "sets": ["reached_core"] },
+        { "on": "attack", "outcome": "success", "sets": ["reached_core"] },
+        { "on": "any", "outcome": "critfail", "damage": 2 }
+      ]
+    },
+    {
+      "id": "ch03",
+      "title": "機関区",
+      "goal": "中枢の隔離を解除するアクセスコードを見つける",
+      "scene_summary": "蒸気が噴き出す機関区。封鎖された端末と、配線の仕掛け。手順を誤れば放電する。",
+      "npcs_present": [],
+      "clear_flag": "access_open",
+      "clear_hint": "端末と配線を調べてアクセスコードを通せばクリア。AIの弱点の手がかりも拾える。",
+      "difficulty": "hard",
+      "rules": [
+        { "on": "search", "outcome": "success", "sets": ["core_weakness", "access_open"] },
+        { "on": "any", "outcome": "critfail", "damage": 2 }
+      ]
+    },
+    {
+      "id": "ch04",
+      "title": "中枢AI『ナギ』",
+      "goal": "暴走した中枢AI『ナギ』と決着をつける",
+      "scene_summary": "無数のモニタが明滅する中枢室。合成音声が、嘆くように同じ言葉を繰り返している。",
+      "npcs_present": [],
+      "clear_flag": "core_resolved",
+      "clear_hint": "ナギと決着。システムを破壊して止めるか、対話で暴走を解かせる。弱点の手がかりがあれば説得が有利、ハル同行でも有利、リヴ加勢で戦闘が有利。",
+      "difficulty": "hard",
+      "boss": { "name": "暴走AI ナギ", "hp": 14, "defeat_sets": ["ai_destroyed", "core_resolved"] },
+      "bonuses": [
+        { "flag": "core_weakness", "on": "talk", "ease": true },
+        { "flag": "crew_ally", "on": "talk", "modifier": 2 },
+        { "flag": "rival_ally", "on": "attack", "modifier": 2 }
+      ],
+      "rules": [
+        { "on": "talk", "outcome": "success", "sets": ["ai_calmed", "core_resolved"] }
+      ]
+    },
+    {
+      "id": "ch05",
+      "title": "帰還",
+      "goal": "結果を持って脱出ポッドへ。航海記録に何を残すかを決める",
+      "scene_summary": "カウントダウンの鳴る脱出ポッド。最後に、ステーションの通信ログへ何を残すかを選べる。",
+      "npcs_present": [],
+      "clear_flag": "ending_reached",
+      "clear_hint": "記録に何を残すか（真実をありのまま／伏せる）を決めればエンディング。",
+      "difficulty": "normal",
+      "rules": [
+        { "on": "any", "requires_any": ["真実", "記録", "報告", "伝え", "残す", "話"], "sets": ["ending_reached"] },
+        { "on": "any", "requires_any": ["真実", "記録", "報告", "伝え", "残す", "話"], "excludes_any": ["伏せ", "隠し", "隠す", "黙", "嘘", "偽", "改ざん"], "sets": ["told_truth"] }
+      ]
+    }
+  ],
+  "endings": [
+    { "requires_all": ["ai_calmed", "told_truth"], "text": "【最良】ナギを説き伏せ、真実を記録に残した。ステーションは静かに眠りにつき、クルーも生きて地上へ還った。" },
+    { "requires_any": ["ai_calmed", "ai_destroyed"], "text": "【部分成功】脅威は去った。だが沈黙したナギの真意も、伏せた記録も、胸の奥に澱を残した。" },
+    { "text": "【失敗】中枢は暴走を続け、アマツは軌道を外れて落ちていく。それでも脱出ポッドの中で、あなたはまだ諦めていない。" }
+  ]
+}

@@ -1,6 +1,13 @@
 {
   "title": "忘れられた祠の灯",
   "world": "中世風ファンタジー。深い森のふもとの小さな村『リンデン』と、近くの古い遺跡『忘れられた祠』。夜ごと祠から青白い光が漏れ、村人は災いを恐れている。",
+  "start": {
+    "player_name": "アルド",
+    "player_class": "戦士",
+    "stats": { "luck": 12, "attack": 14, "life": 20 },
+    "inventory": ["たいまつ", "ロープ", "回復薬"],
+    "world": { "time_of_day": "夕", "weather": "曇り", "alertness": "低", "ambient": "酒場のざわめき、薪の匂い" }
+  },
   "npcs": {
     "karasu": {
       "name": "カラス",

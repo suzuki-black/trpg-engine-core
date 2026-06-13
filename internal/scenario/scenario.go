@@ -76,10 +76,21 @@ type Ending struct {
 	Text        string   `json:"text"`
 }
 
-// Scenario は章リスト・NPC・エンディングを保持する。
+// StartState はシナリオ開始時のプレイヤー・世界状態（任意）。
+// 省略時は CLI の既定値が使われる。シナリオを自己完結させるために使う。
+type StartState struct {
+	PlayerName  string         `json:"player_name"`
+	PlayerClass string         `json:"player_class"`
+	Stats       map[string]int `json:"stats"`
+	Inventory   []string       `json:"inventory"`
+	World       state.World    `json:"world"`
+}
+
+// Scenario は章リスト・NPC・エンディング・開始状態を保持する。
 type Scenario struct {
 	Title    string                 `json:"title"`
 	World    string                 `json:"world"`
+	Start    *StartState            `json:"start"`
 	Chapters []Chapter              `json:"chapters"`
 	NPCs     map[string]NPCTemplate `json:"npcs"`
 	Endings  []Ending               `json:"endings"`
