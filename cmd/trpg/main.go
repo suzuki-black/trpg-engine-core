@@ -15,14 +15,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"golang.org/x/term"
+	"github.com/chzyer/readline"
 
 	"trpg-engine-core/internal/engine"
 	"trpg-engine-core/internal/gm"
@@ -33,54 +32,45 @@ import (
 	"trpg-engine-core/internal/state"
 )
 
-// promptReader は1行入力を読む。実端末では行編集（バックスペース・矢印キー）を
-// 有効にし、パイプ入力（demo/テスト）では素朴な行読みにフォールバックする。
+// promptReader は1行入力を読む。実端末では CJK 対応の行編集（バックスペース・
+// 矢印キー・履歴）を有効にし、パイプ入力（demo/テスト）では素朴な行読みにする。
 type promptReader struct {
-	fd      int
-	isTTY   bool
-	scanner *bufio.Scanner
+	rl      *readline.Instance // 実端末のときのみ
+	scanner *bufio.Scanner     // パイプ入力のとき
 }
 
 func newPromptReader() *promptReader {
-	fd := int(os.Stdin.Fd())
-	return &promptReader{
-		fd:      fd,
-		isTTY:   term.IsTerminal(fd),
-		scanner: bufio.NewScanner(os.Stdin),
+	// 文字デバイス（端末）かどうかを標準ライブラリだけで判定する。
+	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) != 0 {
+		if rl, err := readline.NewEx(&readline.Config{Prompt: "> "}); err == nil {
+			return &promptReader{rl: rl}
+		}
 	}
+	return &promptReader{scanner: bufio.NewScanner(os.Stdin)}
 }
 
-type stdio struct {
-	io.Reader
-	io.Writer
+func (p *promptReader) close() {
+	if p.rl != nil {
+		p.rl.Close()
+	}
 }
 
 // read はプロンプトを表示して1行読む。第2戻り値が false なら入力終了。
 func (p *promptReader) read(prompt string) (string, bool) {
-	if !p.isTTY {
-		fmt.Print(prompt)
-		if !p.scanner.Scan() {
+	if p.rl != nil {
+		p.rl.SetPrompt(strings.TrimLeft(prompt, "\n"))
+		fmt.Print(strings.Repeat("\n", len(prompt)-len(strings.TrimLeft(prompt, "\n"))))
+		line, err := p.rl.Readline()
+		if err != nil { // io.EOF(Ctrl-D) / ErrInterrupt(Ctrl-C)
 			return "", false
 		}
-		return strings.TrimSpace(p.scanner.Text()), true
+		return strings.TrimSpace(line), true
 	}
-	// 実端末: 入力の間だけ raw モードにし、行編集を term に任せる。
-	fmt.Print("\n")
-	old, err := term.MakeRaw(p.fd)
-	if err != nil {
-		fmt.Print(prompt)
-		if !p.scanner.Scan() {
-			return "", false
-		}
-		return strings.TrimSpace(p.scanner.Text()), true
-	}
-	t := term.NewTerminal(stdio{os.Stdin, os.Stdout}, strings.TrimLeft(prompt, "\n"))
-	line, err := t.ReadLine()
-	term.Restore(p.fd, old)
-	if err != nil { // EOF（Ctrl-D）など
+	fmt.Print(prompt)
+	if !p.scanner.Scan() {
 		return "", false
 	}
-	return strings.TrimSpace(line), true
+	return strings.TrimSpace(p.scanner.Text()), true
 }
 
 const (
@@ -187,6 +177,7 @@ func printIntro(scn *scenario.Scenario, sess *state.Session, client llm.Client) 
 
 func runREPL(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, sess *state.Session) {
 	pr := newPromptReader()
+	defer pr.close()
 	for {
 		input, ok := pr.read("\n> ")
 		if !ok {
