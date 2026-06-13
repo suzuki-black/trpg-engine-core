@@ -272,9 +272,15 @@ func (e *Engine) applyProgress(ch *scenario.Chapter, actionType, input string, c
 			e.Sess.SetFlag("boss_resolved", true)
 		}
 	case "ch05":
-		// 報告すればエンディング。真実を語ったかをフラグ化。
-		if strings.Contains(input, "真実") || strings.Contains(input, "語") || strings.Contains(input, "報告") {
-			if !strings.Contains(input, "伏せ") && !strings.Contains(input, "隠") {
+		// 報告すればエンディング。真実を語ったか／伏せたかをフラグ化する。
+		reported := containsAny(input, "真実", "語", "報告", "伝え", "話")
+		if reported {
+			// 「隠す/伏せる」系は伏匿。ただし「隠さず/包み隠さず/隠さない」は否定＝真実を話す。
+			hiding := containsAny(input, "伏せ", "隠し", "隠す", "黙", "嘘", "偽")
+			if strings.Contains(input, "隠さ") { // 隠さず・隠さない 等
+				hiding = false
+			}
+			if !hiding {
 				e.Sess.SetFlag("told_truth", true)
 			}
 			e.Sess.SetFlag("ending_reached", true)
@@ -372,4 +378,13 @@ func (e *Engine) LoadSession(s *state.Session) {
 func oneLine(s string) string {
 	s = strings.ReplaceAll(s, "\n", " / ")
 	return strings.TrimSpace(s)
+}
+
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }

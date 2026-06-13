@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"trpg-engine-core/internal/gm"
@@ -99,6 +100,39 @@ func TestClassifyIntent(t *testing.T) {
 			t.Errorf("classify(%q) = (%s, check=%v), want (%s, %v)",
 				c.input, action, check, c.wantAction, c.wantCheck)
 		}
+	}
+}
+
+// 第5章エンディング: 「包み隠さず報告」は真実を語った扱い（"隠"の部分一致で誤判定しない）。
+func TestChapter5TruthReporting(t *testing.T) {
+	mkCh5 := func(input string) *state.Session {
+		scn := scenario.ForgottenShrine()
+		sess := state.NewSession()
+		sess.Player = state.PlayerCharacter{Stats: map[string]int{"luck": 12, "attack": 14, "life": 20}}
+		sess.ChapterID = "ch05"
+		sess.SceneSummary = scn.Chapter("ch05").SceneSummary
+		sess.SetFlag("spirit_soothed", true) // 交渉で鎮めた前提
+		mock := llm.NewMock()
+		eng := New(scn, sess, rand.New(rand.NewSource(1)), gm.New(mock, 0), npc.New(mock, 0))
+		if _, err := eng.Step(context.Background(), input); err != nil {
+			t.Fatal(err)
+		}
+		return sess
+	}
+
+	// 「包み隠さず真実を報告」→ told_truth=true（最良エンディング条件）
+	s := mkCh5("村長にすべてを包み隠さず真実のまま報告する")
+	if !s.Flag("told_truth") {
+		t.Error("『包み隠さず報告』が told_truth=false 扱いになっている")
+	}
+	if got := (&Engine{Sess: s}).computeEnding(); !strings.Contains(got, "最良") {
+		t.Errorf("最良エンディングにならない: %s", got)
+	}
+
+	// 「真実は伏せて報告」→ told_truth=false（部分成功）
+	s2 := mkCh5("村長には都合の悪い真実は伏せて報告する")
+	if s2.Flag("told_truth") {
+		t.Error("『伏せて報告』なのに told_truth=true になっている")
 	}
 }
 
