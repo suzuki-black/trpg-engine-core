@@ -5,7 +5,7 @@
 **Design philosophy: _the LLM creates, the engine decides._**
 Narration and roleplay are delegated to a local LLM (via [Ollama](https://ollama.com/)); D20 resolution, difficulty, flags, and chapter progression are owned by Go and never left to the model. This keeps the story free-form **and** the rules consistent.
 
-It runs out of the box — **no API keys, no cloud, dependency-light** (Go standard library plus `github.com/chzyer/readline` for CJK-aware terminal line editing). If Ollama isn't running, it falls back to an offline mock so you can still see the machinery work.
+It runs out of the box — **no API keys, no cloud, dependency-light** (Go standard library plus `golang.org/x/term` for raw-mode terminal access; line editing is a small custom CJK-aware editor). If Ollama isn't running, it falls back to an offline mock so you can still see the machinery work.
 
 > ⚠️ **Prototype.** This is an early proof-of-concept, published for feedback and experimentation.
 
@@ -20,7 +20,7 @@ It runs out of the box — **no API keys, no cloud, dependency-light** (Go stand
 - 📖 **Data-driven, branching scenarios** — chapters, NPCs, progression rules, bonuses, boss, and endings are defined in JSON (no recompile). The engine is scenario-agnostic; load your own with `-scenario`. Fixed skeleton, improvised details; multiple routes (fight vs. negotiate) lead to 3 endings.
 - ⚔️ **Boss combat** — HP-based multi-round attack rolls, with bonuses wired to earlier choices (clues found / allies recruited make negotiation easier).
 - 💾 **Save & load** — full session state (player, NPC attitudes, chapter, flags, world, boss HP) to JSON, with named multi-slot saves and autosave on chapter transitions.
-- 🪶 **Dependency-light** — pure Go, a single static binary; the only direct dependency is `github.com/chzyer/readline` for CJK-aware terminal line editing.
+- 🪶 **Dependency-light** — pure Go, a single static binary; the only direct dependency is `golang.org/x/term` (raw mode). The line editor is a small built-in, with correct East Asian (full-width) cursor handling.
 
 ## 🚀 Quick Start
 
@@ -100,7 +100,7 @@ The bundled scenario *“The Light of the Forgotten Shrine”* and its NPCs are 
 **設計思想：_LLM は創造、エンジンは決定論。_**
 描写とロールプレイはローカル LLM（[Ollama](https://ollama.com/)）に委ね、D20 判定・難易度・フラグ・章進行は Go が管理してモデルに渡しません。これにより、物語の自由度と**ルールの一貫性**を両立します。
 
-依存は最小限（Go 標準ライブラリ＋日本語対応の行編集用 `github.com/chzyer/readline` のみ）で、**APIキー不要・クラウド不要**。Ollama が無い場合はオフラインの mock にフォールバックし、エンジンの動作だけでも確認できます。
+依存は最小限（Go 標準ライブラリ＋端末 raw モード用の `golang.org/x/term` のみ。行編集は全角幅を正しく扱う自前の小型エディタ）で、**APIキー不要・クラウド不要**。Ollama が無い場合はオフラインの mock にフォールバックし、エンジンの動作だけでも確認できます。
 
 > ⚠️ **試作品（プロトタイプ）です。** フィードバックと実験のために公開しています。
 
@@ -115,7 +115,7 @@ The bundled scenario *“The Light of the Forgotten Shrine”* and its NPCs are 
 - 📖 **データ駆動の分岐シナリオ** — 章・NPC・進行ルール・ボーナス・ボス・エンディングを JSON で定義（再コンパイル不要）。エンジンはシナリオ非依存で、`-scenario` で自作も読み込み可能。骨格は固定・細部は即興、戦闘/交渉で3通りの結末へ。
 - ⚔️ **ボス戦** — HP制の複数回 attack 判定。手がかり収集・仲間加入などの過去の選択が交渉を有利にする補正を実装。
 - 💾 **セーブ＆ロード** — セッション全状態（プレイヤー/NPC態度/章/フラグ/世界/ボスHP）を JSON で保存。
-- 🪶 **依存は最小限** — ほぼ Go 標準ライブラリ。単一バイナリ。日本語対応の行編集に `github.com/chzyer/readline` のみ使用。
+- 🪶 **依存は最小限** — ほぼ Go 標準ライブラリ。単一バイナリ。直接依存は `golang.org/x/term`（raw モード）のみ。行編集は全角カーソルを正しく扱う自前の小型エディタ。
 
 ## 🚀 クイックスタート
 

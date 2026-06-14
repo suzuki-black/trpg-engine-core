@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chzyer/readline"
-
 	"trpg-engine-core/internal/engine"
 	"trpg-engine-core/internal/gm"
 	"trpg-engine-core/internal/intent"
@@ -33,36 +31,32 @@ import (
 	"trpg-engine-core/internal/state"
 )
 
-// promptReader は1行入力を読む。実端末では CJK 対応の行編集（バックスペース・
-// 矢印キー・履歴）を有効にし、パイプ入力（demo/テスト）では素朴な行読みにする。
+// promptReader は1行入力を読む。実端末では CJK の表示幅を正しく扱う自前エディタ
+// （lineEditor）で行編集（バックスペース・矢印・Home/End）を行い、パイプ入力
+// （demo/テスト）では素朴な行読みにフォールバックする。
 type promptReader struct {
-	rl      *readline.Instance // 実端末のときのみ
-	scanner *bufio.Scanner     // パイプ入力のとき
+	ed      *lineEditor    // 実端末のとき
+	scanner *bufio.Scanner // パイプ入力のとき
 }
 
 func newPromptReader() *promptReader {
 	// 文字デバイス（端末）かどうかを標準ライブラリだけで判定する。
 	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) != 0 {
-		if rl, err := readline.NewEx(&readline.Config{Prompt: "> "}); err == nil {
-			return &promptReader{rl: rl}
-		}
+		return &promptReader{ed: newLineEditor()}
 	}
 	return &promptReader{scanner: bufio.NewScanner(os.Stdin)}
 }
 
-func (p *promptReader) close() {
-	if p.rl != nil {
-		p.rl.Close()
-	}
-}
+func (p *promptReader) close() {}
 
 // read はプロンプトを表示して1行読む。第2戻り値が false なら入力終了。
 func (p *promptReader) read(prompt string) (string, bool) {
-	if p.rl != nil {
-		p.rl.SetPrompt(strings.TrimLeft(prompt, "\n"))
-		fmt.Print(strings.Repeat("\n", len(prompt)-len(strings.TrimLeft(prompt, "\n"))))
-		line, err := p.rl.Readline()
-		if err != nil { // io.EOF(Ctrl-D) / ErrInterrupt(Ctrl-C)
+	if p.ed != nil {
+		// 先頭の改行はクックドモードのうちに出し、編集はプロンプト本体だけで行う。
+		body := strings.TrimLeft(prompt, "\n")
+		fmt.Print(prompt[:len(prompt)-len(body)])
+		line, ok := p.ed.readLine(body)
+		if !ok {
 			return "", false
 		}
 		return strings.TrimSpace(line), true
@@ -99,8 +93,15 @@ func main() {
 		loadPath     = flag.String("load", "", "起動時にセーブ（スロット名 or パス）から再開する")
 		qcRetries    = flag.Int("qc-retries", 2, "非日本語混入時に書き直させる最大回数（0で無効）")
 		scenarioPath = flag.String("scenario", "", "シナリオJSONのパス（未指定なら内蔵の『忘れられた祠の灯』）")
+		editHarness  = flag.Bool("editharness", false, "（テスト用）行エディタだけ動かし、確定文字列を出力する")
 	)
 	flag.Parse()
+
+	if *editHarness {
+		line, ok := newLineEditor().readLine("カイ：")
+		fmt.Printf("\nGOT:[%s] ok=%v\n", line, ok)
+		return
+	}
 
 	// --- LLM クライアント選択（Ollama 優先、無ければ mock） ---
 	var client llm.Client
