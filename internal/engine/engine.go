@@ -158,6 +158,19 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	}
 	res.Action = actionType
 
+	// 0) 雑談・突っ込み(ooc): 物語を進めず、GMが卓仲間として一言返すだけ。
+	if actionType == "ooc" {
+		note := "プレイヤーは物語内の行動ではなく、雑談・軽口・突っ込み・質問をした。" +
+			"GMとして気さくに一言返し、物語は進めず、操作キャラに次の行動を促すこと。"
+		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note})
+		narr, err := e.GM.Narrate(ctx, cInput)
+		if err != nil {
+			return nil, err
+		}
+		res.Narration = e.cleanNarration(narr)
+		return res, nil
+	}
+
 	// 2) 判定が必要なら CheckRequest を組み立てて判定エンジンへ（§1.6）
 	var check *dice.CheckResult
 	if needCheck {
@@ -218,7 +231,7 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	res.Narration = strings.TrimSpace(narr)
+	res.Narration = e.cleanNarration(narr)
 
 	// 5) フラグ更新・章進行（シナリオ管理の制約に従う）
 	e.applyProgress(ch, actionType, input, check)
@@ -245,6 +258,36 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 			"いまの目標: " + ch.Goal
 	}
 	return res, nil
+}
+
+// cleanNarration は GM 出力から、小型モデルが混ぜがちな
+// 「操作キャラのセリフ代弁」と「箇条書きの選択肢メニュー」を除去する。
+// （リプレイ風にするため、行動候補メニューもプレイヤー代弁も出さない方針。）
+// 全部消えてしまう場合は元の文を返す。
+func (e *Engine) cleanNarration(narr string) string {
+	pc := e.Sess.Player.Name
+	lines := strings.Split(strings.TrimSpace(narr), "\n")
+	kept := make([]string, 0, len(lines))
+	for _, ln := range lines {
+		t := strings.TrimSpace(ln)
+		// 箇条書きの選択肢メニュー行を捨てる。
+		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || strings.HasPrefix(t, "・") {
+			continue
+		}
+		// 「アルド：…」「アルド →…」のような操作キャラ代弁行を捨てる。
+		if pc != "" {
+			if strings.HasPrefix(t, pc+"：") || strings.HasPrefix(t, pc+":") ||
+				strings.HasPrefix(t, pc+" ") || strings.HasPrefix(t, pc+"　") {
+				continue
+			}
+		}
+		kept = append(kept, ln)
+	}
+	out := strings.TrimSpace(strings.Join(kept, "\n"))
+	if out == "" {
+		return strings.TrimSpace(narr)
+	}
+	return out
 }
 
 func countTrueFlags(flags map[string]bool) int {

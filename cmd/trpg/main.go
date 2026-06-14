@@ -220,8 +220,9 @@ func printIntro(scn *scenario.Scenario, sess *state.Session, client llm.Client) 
 func runREPL(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, sess *state.Session) {
 	pr := newPromptReader()
 	defer pr.close()
+	noProgress := 0
 	for {
-		input, ok := pr.read("\n> ")
+		input, ok := pr.read("\n" + sess.Player.Name + "：")
 		if !ok {
 			return
 		}
@@ -266,7 +267,7 @@ func runREPL(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, se
 			}
 			continue
 		}
-		if doTurn(ctx, eng, scn, sess, input) {
+		if doTurn(ctx, eng, scn, sess, input, &noProgress) {
 			return
 		}
 	}
@@ -281,38 +282,49 @@ func runDemo(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, se
 		"精霊の事情を聞き、穏やかに説得して鎮めようとする",
 		"村長に真実をありのまま報告する",
 	}
+	noProgress := 0
 	for _, in := range script {
-		fmt.Printf("\n> %s\n", in)
-		if doTurn(ctx, eng, scn, sess, in) {
+		fmt.Printf("\n%s：%s\n", sess.Player.Name, in)
+		if doTurn(ctx, eng, scn, sess, in, &noProgress) {
 			return
 		}
 	}
 }
 
-// doTurn は 1 ターン実行して表示する。ended なら true。
-func doTurn(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, sess *state.Session, input string) bool {
+// doTurn は 1 ターン実行して、リプレイ（台本）風に表示する。ended なら true。
+// noProgress は連続で進展しなかった回数。一定回数たまった時だけヒントを出す。
+func doTurn(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, sess *state.Session, input string, noProgress *int) bool {
 	res, err := eng.Step(ctx, input)
 	if err != nil {
 		fmt.Printf("エラー: %v\n", err)
 		return false
 	}
-	// 透明性: 行動をどう解釈したかを必ず示す。
-	fmt.Printf("\n〔解釈: %s〕\n", jpAction(res.Action))
+	// 判定があれば、GMが出目を呼びかける形で見せる（卓の見せ場）。
 	if res.Check != nil {
 		c := res.Check
-		fmt.Printf("🎲 [判定] %s  D20=%d %+d = %d  vs DC%d → %s\n",
-			jpAction(c.ActionType), c.Roll, c.StatMod, c.Total, c.DC, c.Outcome.JP())
+		fmt.Printf("\nGM：さあ%s判定だ。D20を振って、修正込みで%d以上なら成功——いくぞ！\n",
+			jpAction(c.ActionType), c.DC)
+		fmt.Printf("🎲 D20=%d %+d = %d （%d以上で成功） → %s\n",
+			c.Roll, c.StatMod, c.Total, c.DC, c.Outcome.JP())
 	}
 	if res.Combat != "" {
 		fmt.Printf("%s\n", res.Combat)
 	}
 	for _, raw := range res.NPCRaw {
-		fmt.Printf("\n💬 %s\n", indent(raw))
+		fmt.Printf("\n%s\n", formatNPC(raw))
 	}
-	fmt.Printf("\n📖 %s\n", res.Narration)
+	fmt.Printf("\nGM：%s\n", res.Narration)
 
-	// 透明性: 判定も進行も起きなかった時は理由とヒントを伝える。
-	if res.Hint != "" {
+	// 連続で進展しない時だけ、そっと目標を示す（毎回ナグらない）。
+	// 雑談・突っ込み(ooc)はカウントしない（行き詰まりではない）。
+	if res.Action != "ooc" {
+		if res.Progressed {
+			*noProgress = 0
+		} else {
+			*noProgress++
+		}
+	}
+	if res.Action != "ooc" && !res.Progressed && *noProgress >= 2 && res.Hint != "" {
 		fmt.Printf("\n💡 %s\n", res.Hint)
 	}
 
@@ -378,6 +390,31 @@ func printSaves(scn *scenario.Scenario) {
 		}
 		fmt.Printf("  %-12s  %s  [%s]\n", in.Name, title, when)
 	}
+}
+
+// formatNPC は NPC モジュールの生出力（"名前:\nline: 「…」\ntone: …"）を
+// リプレイ風の一行「名前：「セリフ」（トーン）」に整形する。
+func formatNPC(raw string) string {
+	lines := strings.Split(raw, "\n")
+	name, say, tone := "", "", ""
+	for i, ln := range lines {
+		ln = strings.TrimSpace(ln)
+		switch {
+		case i == 0:
+			name = strings.TrimRight(ln, "：:")
+		case strings.HasPrefix(ln, "line:") || strings.HasPrefix(ln, "line："):
+			say = strings.TrimSpace(strings.TrimLeft(ln, "line:："))
+		case strings.HasPrefix(ln, "tone:") || strings.HasPrefix(ln, "tone："):
+			tone = strings.TrimSpace(strings.TrimLeft(ln, "tone:："))
+		}
+	}
+	if say == "" { // 整形に失敗したら生をそのまま
+		return raw
+	}
+	if tone != "" {
+		return fmt.Sprintf("%s：%s（%s）", name, say, tone)
+	}
+	return fmt.Sprintf("%s：%s", name, say)
 }
 
 // jpAction は行動種別を日本語ラベルにする（ユーザー向け表示）。

@@ -28,9 +28,10 @@ var simplifiedOnly = func() map[rune]bool {
 		shell = "财货购贵费资赏赚贫贪贾赂"                // 贝（貝偏）
 		silk  = "约级纯线练组细织终绍结续绿编绕绳绪缚"          // 纟（糸偏）
 		misc2 = "雾务办节优杀类头测渐滨毕显爱丰"             // その他よく漏れる簡体字
+		zhPtc = "呢吗吧啦咯嘛呗咧"                    // 中国語の語気助詞（日本語では使わない）
 	)
 	m := map[rune]bool{}
-	for _, set := range []string{misc, speak, metal, food, door, cart, horse, shell, silk, misc2} {
+	for _, set := range []string{misc, speak, metal, food, door, cart, horse, shell, silk, misc2, zhPtc} {
 		for _, r := range set {
 			m[r] = true
 		}

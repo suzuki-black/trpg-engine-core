@@ -20,13 +20,15 @@ type Func func(ctx context.Context, input string) (string, string, bool)
 // KeywordFunc はキーワード分類（LLM非依存）の関数型。
 type KeywordFunc func(input string) (string, string, bool)
 
-const classifySystem = `あなたはテキストTRPGの行動分類器です。
-プレイヤーの行動文を、次の4種類のいずれか「1語」だけで答えてください。説明・記号・改行は不要です。
+const classifySystem = `あなたはテーブルトークRPGの「プレイヤー発言」分類器です。
+発言を、次の5種類のいずれか「1語」だけで答えてください。説明・記号・改行は不要です。
 - attack : 攻撃・戦闘・斬る・倒すなど、敵に物理的に仕掛ける行動
 - search : 調べる・探す・探索・観察・罠の解除・鍵開け・謎解きなど
-- talk   : 会話・挨拶・質問・交渉・説得・脅し・呼びかけなど、相手に言葉で働きかける行動
-- move   : 移動・前進・その他、上のどれにも当てはまらず判定が不要な行動
-必ず attack / search / talk / move のいずれか1語だけを出力してください。`
+- talk   : 物語内での会話・挨拶・質問・交渉・説得・脅し・呼びかけ（登場人物に向けた台詞）
+- move   : 移動・前進・その他、判定の要らない物語内の行動
+- ooc    : 物語内の行動ではない、プレイヤー(中の人)としての雑談・突っ込み・ぼやき・
+           ルールやGMへの文句や質問（例:「何でいきなり酒場なんだよ」「マジか」「次どうすればいい?」）
+必ず attack / search / talk / move / ooc のいずれか1語だけを出力してください。`
 
 // NewLLM はハイブリッド分類器を返す。
 // まず keyword で判定し、明確な行動が取れればそれを採用（高速・決定論）。
@@ -45,6 +47,8 @@ func NewLLM(c llm.Client, keyword KeywordFunc) Func {
 			return "search", "luck", true
 		case "talk":
 			return "talk", "luck", true
+		case "ooc":
+			return "ooc", "", false // 雑談・突っ込み（判定なし・進行なし）
 		default: // move / 解釈不能
 			return "move", "", false
 		}
@@ -59,7 +63,7 @@ func ask(ctx context.Context, c llm.Client, input string) string {
 	}
 	out = strings.ToLower(out)
 	best, label := len(out), ""
-	for _, l := range []string{"attack", "search", "talk", "move"} {
+	for _, l := range []string{"attack", "search", "talk", "move", "ooc"} {
 		if i := strings.Index(out, l); i >= 0 && i < best {
 			best, label = i, l
 		}
