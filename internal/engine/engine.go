@@ -274,12 +274,13 @@ func (e *Engine) cleanNarration(narr string) string {
 		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || strings.HasPrefix(t, "・") {
 			continue
 		}
-		// 「アルド：…」「アルド →…」のような操作キャラ代弁行を捨てる。
-		if pc != "" {
-			if strings.HasPrefix(t, pc+"：") || strings.HasPrefix(t, pc+":") ||
-				strings.HasPrefix(t, pc+" ") || strings.HasPrefix(t, pc+"　") {
-				continue
-			}
+		// 話者表記のない「セリフだけ」の行を捨てる（規範: セリフは話者名＋鉤括弧）。
+		// 主人公の台詞の反響など、誰の発言か不明な裸の引用を除去する。
+		if strings.HasPrefix(t, "「") && strings.HasSuffix(t, "」") {
+			continue
+		}
+		if pc != "" && isPCAuthored(t, pc) {
+			continue // 主人公の行動・セリフをGMが書いた行は捨てる（役割の簒奪を防ぐ）
 		}
 		kept = append(kept, ln)
 	}
@@ -288,6 +289,46 @@ func (e *Engine) cleanNarration(narr string) string {
 		return strings.TrimSpace(narr)
 	}
 	return out
+}
+
+// isPCAuthored は、その行が「主人公（pc）を主語に行動・発話させている」GMの逸脱
+// かどうかを判定する。鉤括弧の中身（セリフ）を取り除いてから判定するので、
+// NPCのセリフ内に主人公名が出てきても（例: ハル：「カイ、お前…」）誤って消さない。
+// 「カイ、どうする?」のような“呼びかけ”は主人公の代弁ではないので残す。
+func isPCAuthored(line, pc string) bool {
+	// 「カイ：…」「カイ:…」のような話者ラベル行。
+	if strings.HasPrefix(line, pc+"：") || strings.HasPrefix(line, pc+":") {
+		return true
+	}
+	// 鉤括弧の外側（地の文・話者表記）だけを見る。
+	outside := stripQuoted(line)
+	// 「カイは…」「カイが…」が地の文に出る＝主人公を主語に動かしている／喋らせている
+	//（例:「『…』カイが声を張り上げる」「カイは歩み寄り、『…』」）。
+	if strings.Contains(outside, pc+"は") || strings.Contains(outside, pc+"が") {
+		return true
+	}
+	return false
+}
+
+// stripQuoted は 「…」『…』 で囲まれた部分（セリフ）を取り除いた残りを返す。
+func stripQuoted(s string) string {
+	var b strings.Builder
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '「', '『':
+			depth++
+		case '」', '』':
+			if depth > 0 {
+				depth--
+			}
+		default:
+			if depth == 0 {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return b.String()
 }
 
 func countTrueFlags(flags map[string]bool) int {
