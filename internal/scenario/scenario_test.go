@@ -60,6 +60,28 @@ func TestValidationRejectsBadScenario(t *testing.T) {
 	}
 }
 
+// 同梱の外部シナリオ（SF版）が読み込め、全章にシーン情報が付いている。
+func TestExternalScenarioLoads(t *testing.T) {
+	s, err := Load("../../scenarios/orbital-amatsu.json")
+	if err != nil {
+		t.Fatalf("外部シナリオの読み込み失敗: %v", err)
+	}
+	for _, ch := range s.Chapters {
+		if len(ch.Facts) == 0 {
+			t.Errorf("章 %s に事実(facts)が無い", ch.ID)
+		}
+	}
+}
+
+// 不正な reveal 値は検証で弾かれる。
+func TestValidationRejectsBadReveal(t *testing.T) {
+	js := `{"title":"t","chapters":[{"id":"c1","clear_flag":"f",
+		"facts":[{"text":"x","reveal":"sometimes"}]}],"endings":[{"text":"e"}]}`
+	if _, err := LoadJSON([]byte(js)); err == nil {
+		t.Error("不正な reveal 値が通ってしまった")
+	}
+}
+
 // 不正な JSON 構文はエラー。
 func TestInvalidJSON(t *testing.T) {
 	if _, err := LoadJSON([]byte("{not json")); err == nil || !strings.Contains(err.Error(), "解析") {

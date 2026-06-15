@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"trpg-engine-core/internal/state"
 )
@@ -187,11 +188,27 @@ func (s *Scenario) validate() error {
 		if ch.Boss != nil && len(ch.Boss.DefeatSets) == 0 {
 			return fmt.Errorf("章 %s のボスに defeat_sets がない", ch.ID)
 		}
+		for _, f := range ch.Facts {
+			if !validReveal(f.Reveal) {
+				return fmt.Errorf("章 %s の事実 %q に不正な reveal 値 %q", ch.ID, f.Text, f.Reveal)
+			}
+		}
 	}
 	if len(s.Endings) == 0 {
 		return fmt.Errorf("エンディングが定義されていない")
 	}
 	return nil
+}
+
+// validReveal は事実の開示条件が既知の形式か（authoring のタイポ検出）。
+//
+//	"" / always / ask / search / talk / flag:<name>
+func validReveal(r string) bool {
+	switch r {
+	case "", "always", "ask", "search", "talk":
+		return true
+	}
+	return strings.HasPrefix(r, "flag:") && len(r) > len("flag:")
 }
 
 // ForgottenShrine は既定シナリオ「忘れられた祠の灯」（埋め込みJSONを解析）。
