@@ -42,6 +42,7 @@ type TurnResult struct {
 	Ending       string
 	Progressed   bool   // 判定・章進行・フラグ変化など実質的な engagement があったか
 	Hint         string // 進展しなかった時のユーザー向けヒント
+	SceneCleared bool   // この章の目標は達成済み＝「次へ」で次場面へ進める
 }
 
 func New(scn *scenario.Scenario, sess *state.Session, rng *rand.Rand, g *gm.GM, n *npc.NPC) *Engine {
@@ -62,8 +63,13 @@ var (
 		"一撃", "とどめ", "迎え撃", "attack",
 	}
 	searchKW = []string{
-		"調べ", "調査", "探索", "探る", "探す", "探し", "捜", "罠", "観察",
-		"見極", "見渡", "見回", "解く", "謎", "仕掛け", "紋章", "search",
+		"調べ", "調査", "探索", "探る", "探す", "探し", "捜", "罠",
+		"見極", "解く", "謎", "仕掛け", "紋章", "search",
+	}
+	// ask は「見れば分かる情報の確認」＝判定なし。search（隠れた物を探す＝判定）と区別する。
+	askKW = []string{
+		"見回", "見渡", "眺め", "観察", "様子", "周囲を", "あたりを見", "周りを見",
+		"何がある", "何かある", "誰がいる", "見える", "見当た", "どこに", "どこだ",
 	}
 	talkKW = []string{
 		"交渉", "説得", "説き", "話しか", "話す", "話", "尋ね", "訊", "聞き", "聞く", "聞",
@@ -88,8 +94,9 @@ func classify(input string) (string, string, bool) {
 			}
 		}
 	}
-	// search を先に、talk/attack を後に走査することで、同位置の競合時は
-	// より能動的な意図（攻撃・会話）を優先する。
+	// ask を先に、search/attack/talk を後に走査することで、同位置の競合時は
+	// より能動的な意図を優先する（例: 「見回して罠を調べる」は search）。
+	scan(askKW, "ask", "")
 	scan(searchKW, "search", "luck")
 	scan(attackKW, "attack", "attack")
 	scan(talkKW, "talk", "luck")
@@ -97,7 +104,9 @@ func classify(input string) (string, string, bool) {
 	if best < 0 {
 		return "move", "", false // 移動・宣言など判定不要
 	}
-	return action, stat, true
+	// ask は判定なし（見れば分かる情報の確認）。他は判定あり。
+	needCheck := action == "attack" || action == "search" || action == "talk"
+	return action, stat, needCheck
 }
 
 // difficultyFor は章データの難易度に、保持フラグによる緩和ボーナスを適用して返す。
@@ -158,11 +167,44 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	}
 	res.Action = actionType
 
-	// 0) 雑談・突っ込み(ooc): 物語を進めず、GMが卓仲間として一言返すだけ。
+	// 0a) この章は既に目標達成済みか。達成済みで「次へ」と言われたら次の場面へ進む。
+	cleared := e.Sess.Flag(ch.ClearFlag)
+	if cleared && isProceed(input) {
+		if next := e.Scn.NextChapter(ch.ID); next != nil {
+			e.Sess.ChapterID = next.ID
+			e.Sess.SceneSummary = next.SceneSummary
+			e.ensureNPCs(next)
+			res.Action = "move"
+			res.ChapterMoved = true
+			res.NewChapter = next
+			res.Progressed = true
+			return res, nil
+		}
+		res.Ended = true
+		res.Ending = e.computeEnding()
+		res.Progressed = true
+		return res, nil
+	}
+
+	// 0b) 雑談・突っ込み(ooc): 物語を進めず、GMが卓仲間として一言返すだけ。
 	if actionType == "ooc" {
 		note := "プレイヤーは物語内の行動ではなく、雑談・軽口・突っ込み・質問をした。" +
 			"GMとして気さくに一言返し、物語は進めず、操作キャラに次の行動を促すこと。"
-		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note})
+		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note}, nil)
+		narr, err := e.GM.Narrate(ctx, cInput)
+		if err != nil {
+			return nil, err
+		}
+		res.Narration = e.cleanNarration(narr)
+		return res, nil
+	}
+
+	// 0c) 質問・観察(ask): 判定なし・進行なし。今“開示可能な事実だけ”からGMが答える。
+	if actionType == "ask" {
+		note := "プレイヤーは場面について質問・観察した。" +
+			"下の[シーン情報]の範囲だけで答えること。書かれていないことは『分からない/見当たらない』と返す。" +
+			"判定はせず、物語も進めない。"
+		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note}, e.revealableFacts(ch))
 		narr, err := e.GM.Narrate(ctx, cInput)
 		if err != nil {
 			return nil, err
@@ -189,6 +231,14 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		r := e.Resolver.Resolve(req)
 		check = &r
 		res.Check = check
+		// 探索/会話に成功したら、その章の隠し事実（reveal: search/talk）を開示可能にする。
+		if r.Outcome == dice.Success || r.Outcome == dice.CriticalSuccess {
+			if actionType == "search" {
+				e.Sess.SetFlag("searched_"+ch.ID, true)
+			} else if actionType == "talk" {
+				e.Sess.SetFlag("talked_"+ch.ID, true)
+			}
+		}
 	}
 
 	// 2.5) 戦闘ルート: ボスのいる章で attack はボスHPを削る複数回戦闘として解決する。
@@ -225,37 +275,35 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		}
 	}
 
-	// 4) GM 描写を生成（判定結果・NPC発言・特記を統合）
-	cInput := gm.BuildContext(ch, e.Sess, input, check, npcLines, notes)
+	// 4) GM 描写を生成（判定結果・NPC発言・特記・開示可能な事実を統合）
+	cInput := gm.BuildContext(ch, e.Sess, input, check, npcLines, notes, e.revealableFacts(ch))
 	narr, err := e.GM.Narrate(ctx, cInput)
 	if err != nil {
 		return nil, err
 	}
 	res.Narration = e.cleanNarration(narr)
 
-	// 5) フラグ更新・章進行（シナリオ管理の制約に従う）
+	// 5) フラグ更新（シナリオ管理の制約に従う）。
 	e.applyProgress(ch, actionType, input, check)
+
+	// 5b) 章の進行は「シーンを息させる」。目標達成しても即座に進めず、
+	//     プレイヤーが「次へ」と決めるまで場面に留まれる（最終章は即エンディング）。
 	if e.Sess.Flag(ch.ClearFlag) {
-		if next := e.Scn.NextChapter(ch.ID); next != nil {
-			e.Sess.ChapterID = next.ID
-			e.Sess.SceneSummary = next.SceneSummary
-			e.ensureNPCs(next)
-			res.ChapterMoved = true
-			res.NewChapter = next
-		} else {
+		if e.Scn.NextChapter(ch.ID) != nil {
+			res.SceneCleared = true // 先へ進める状態（進むのは「次へ」入力時＝0a）
+		} else if !cleared {
 			res.Ended = true
 			res.Ending = e.computeEnding()
 		}
 	}
 
 	// 6) 透明性: 実質的な engagement があったかを判定し、無ければヒントを出す。
-	res.Progressed = check != nil || res.ChapterMoved || res.Ended ||
+	res.Progressed = check != nil || res.SceneCleared || res.Ended ||
 		res.Combat != "" || countTrueFlags(e.Sess.Flags) > trueFlagsBefore
 	if !res.Progressed {
 		res.Hint = "この行動は判定にも進行にも結びつきませんでした。" +
-			"『誰に・何をするか』を具体的に書くと判定が起きます" +
-			"（例: 『カラスに祠の場所を尋ねる』『扉を調べる』『敵を攻撃する』）。\n" +
-			"いまの目標: " + ch.Goal
+			"場面を知りたいなら『周りを見回す』『何がある?』、行動なら『誰に・何をするか』を具体的に。" +
+			"\nいまの目標: " + ch.Goal
 	}
 	return res, nil
 }
@@ -329,6 +377,40 @@ func stripQuoted(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// isProceed は「次の場面へ進む」意思表示か。シーン達成後の進行トリガに使う。
+func isProceed(input string) bool {
+	s := strings.TrimSpace(strings.ToLower(input))
+	if s == "次" || s == "next" || s == "n" {
+		return true
+	}
+	return containsAny(input, "次へ", "次の場面", "次に進", "先へ進", "先に進", "前へ進", "進もう", "出発")
+}
+
+// revealableFacts は、この章で今“開示してよい事実”だけを返す（隠し事実は含めない）。
+func (e *Engine) revealableFacts(ch *scenario.Chapter) []string {
+	var out []string
+	for _, f := range ch.Facts {
+		if e.factRevealable(ch, f) {
+			out = append(out, f.Text)
+		}
+	}
+	return out
+}
+
+func (e *Engine) factRevealable(ch *scenario.Chapter, f scenario.Fact) bool {
+	switch {
+	case f.Reveal == "" || f.Reveal == "always" || f.Reveal == "ask":
+		return true
+	case f.Reveal == "search":
+		return e.Sess.Flag("searched_" + ch.ID)
+	case f.Reveal == "talk":
+		return e.Sess.Flag("talked_" + ch.ID)
+	case strings.HasPrefix(f.Reveal, "flag:"):
+		return e.Sess.Flag(strings.TrimPrefix(f.Reveal, "flag:"))
+	}
+	return false
 }
 
 func countTrueFlags(flags map[string]bool) int {

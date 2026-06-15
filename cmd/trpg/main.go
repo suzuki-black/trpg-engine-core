@@ -212,7 +212,8 @@ func printIntro(scn *scenario.Scenario, sess *state.Session, client llm.Client) 
 		sess.Player.Name, sess.Player.Class,
 		sess.Player.Stats["luck"], sess.Player.Stats["attack"], sess.Player.Stats["life"])
 	fmt.Printf("LLM: %s\n", client.Name())
-	fmt.Println("コマンド: 行動を日本語で入力 / 'status' / 'saves' 一覧 / 'save [名前]' / 'load [名前]' / 'quit'")
+	fmt.Println("行動を日本語で入力（『周りを見る』で観察、『次へ』で次の場面）。")
+	fmt.Println("コマンド: 'status' / 'saves' / 'save [名前]' / 'load [名前]' / 'quit'")
 	fmt.Println("--------------------------------------------")
 	ch := scn.Chapter(sess.ChapterID)
 	fmt.Printf("\n▼ 第%s章「%s」\n%s\n\n", chapterNo(scn, ch.ID), ch.Title, ch.SceneSummary)
@@ -314,7 +315,9 @@ func doTurn(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, ses
 	for _, raw := range res.NPCRaw {
 		fmt.Printf("\n%s\n", formatNPC(raw))
 	}
-	fmt.Printf("\nGM：%s\n", res.Narration)
+	if res.Narration != "" {
+		fmt.Printf("\nGM：%s\n", res.Narration)
+	}
 
 	// 連続で進展しない時だけ、そっと目標を示す（毎回ナグらない）。
 	// 雑談・突っ込み(ooc)はカウントしない（行き詰まりではない）。
@@ -329,6 +332,9 @@ func doTurn(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, ses
 		fmt.Printf("\n💡 %s\n", res.Hint)
 	}
 
+	if res.SceneCleared && !res.ChapterMoved {
+		fmt.Println("\n（このシーンの目標は果たした。まだ話したり調べたりできる。次の場面へ進むなら『次へ』）")
+	}
 	if res.ChapterMoved {
 		fmt.Printf("\n──────── 章が進行 ────────\n▼ 第%s章「%s」\n%s\n",
 			chapterNo(scn, res.NewChapter.ID), res.NewChapter.Title, res.NewChapter.SceneSummary)

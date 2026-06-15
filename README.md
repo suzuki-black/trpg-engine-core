@@ -15,6 +15,7 @@ It runs out of the box — **no API keys, no cloud, dependency-light** (Go stand
 
 - 🧠 **AI Game Master** — improvises scene description and choices, constrained by the current chapter and a strict do-not list (can't overturn dice, leak un-unlocked lore, or kill NPCs at will).
 - 🗣️ **Natural-language input with feedback** — actions are classified by keyword first, then by the LLM for kana/casual phrasing. Every turn shows how your action was read, and if nothing happened, it tells you why and what the current objective is.
+- 🔎 **Scenes you can explore** — ask/look around for free (no roll) and the GM answers from the scene's facts; secrets stay hidden until you investigate (a successful search/talk) or a flag unlocks them. Meeting a chapter's goal opens the way forward but doesn't yank you onward — linger and role-play, then say "次へ" to proceed.
 - 🎭 **AI NPCs with persistent personalities** — each NPC has a personality, tone, public goal, hidden secret, and an attitude that shifts one step at a time. NPCs return *dialogue + tone only*; the GM weaves it into the prose.
 - 🎲 **Deterministic D20 engine** — `roll + stat modifier vs DC`, with critical success/failure at 20/1. Fully unit-tested.
 - 📖 **Data-driven, branching scenarios** — chapters, NPCs, progression rules, bonuses, boss, and endings are defined in JSON (no recompile). The engine is scenario-agnostic; load your own with `-scenario`. Fixed skeleton, improvised details; multiple routes (fight vs. negotiate) lead to 3 endings.
@@ -48,7 +49,7 @@ go run ./cmd/trpg -scenario scenarios/orbital-amatsu.json
 # (write your own using internal/scenario/scenarios/forgotten-shrine.json as a template)
 ```
 
-In-session commands: type an action in Japanese, or `status` / `saves` (list slots) / `save [name]` / `load [name]` / `quit`. Saves live in `saves/`; chapters autosave to the `autosave` slot.
+Type actions in Japanese. **Asking/looking** ("周りを見る", "何がある?") is free (no roll) and answers from the scene's known facts; the scene **doesn't auto-advance** — say "次へ" to move on when you're ready. In-session commands: `status` / `saves` / `save [name]` / `load [name]` / `quit`. Saves live in `saves/`; chapters autosave to the `autosave` slot.
 
 ## 🏗️ Architecture
 
@@ -110,6 +111,7 @@ The bundled scenario *“The Light of the Forgotten Shrine”* and its NPCs are 
 
 - 🧠 **AI ゲームマスター** — 現在の章と厳格な禁止事項（判定の上書き・未解放情報の漏洩・NPCの勝手な殺害の禁止）に縛られつつ、情景と選択肢を即興生成。
 - 🗣️ **自然言語入力＋フィードバック** — 行動はまずキーワードで、漏れたら（ひらがな・口語）LLMで意図分類。毎ターン「どう解釈したか」を表示し、何も起きなかった時は理由と今の目標を伝える。
+- 🔎 **探索できるシーン** — 観察・質問は判定なしで、GMがシーンの事実から回答。隠し情報は探索/会話の成功やフラグで初めて開く。章の目標を達成しても勝手に進まず、留まってロールしてから「次へ」で進める。
 - 🎭 **人格が持続する AI NPC** — 性格・口調・表向きの目的・隠された秘密を持ち、態度は1段階ずつ変化。NPCは*セリフ＋トーンのみ*を返し、GMが地の文へ統合。
 - 🎲 **決定論的な D20 エンジン** — `出目＋ステータス修正 vs DC`、20/1でクリティカル成功/失敗。単体テスト済み。
 - 📖 **データ駆動の分岐シナリオ** — 章・NPC・進行ルール・ボーナス・ボス・エンディングを JSON で定義（再コンパイル不要）。エンジンはシナリオ非依存で、`-scenario` で自作も読み込み可能。骨格は固定・細部は即興、戦闘/交渉で3通りの結末へ。
@@ -142,7 +144,7 @@ go run ./cmd/trpg -scenario scenarios/orbital-amatsu.json
 # （雛形は internal/scenario/scenarios/forgotten-shrine.json を参照）
 ```
 
-対話コマンド：日本語で行動を入力、または `status` / `saves`（一覧） / `save [名前]` / `load [名前]` / `quit`。セーブは `saves/` に保存され、章進行ごとに `autosave` スロットへ自動保存されます。
+行動は日本語で入力。**観察・質問**（「周りを見る」「何がある?」）は判定なしで、シーンの既知の事実から答えます。目標を達成しても**自動では進まず**、納得したら「次へ」で次の場面へ。コマンド: `status` / `saves`（一覧） / `save [名前]` / `load [名前]` / `quit`。セーブは `saves/` に保存され、章進行ごとに `autosave` スロットへ自動保存されます。
 
 ## 🏗️ アーキテクチャ
 

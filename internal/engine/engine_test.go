@@ -68,9 +68,17 @@ func TestCombatRouteDefeatsBoss(t *testing.T) {
 	if sess.Boss.HP != 0 {
 		t.Errorf("ボスHP = %d, want 0", sess.Boss.HP)
 	}
-	// 撃破でクリアフラグが立ち、章が ch05 へ進んでいる。
-	if sess.ChapterID != "ch05" {
-		t.Errorf("撃破後の章 = %s, want ch05", sess.ChapterID)
+	// 撃破でクリアフラグは立つが、即座には進まず「先へ進める」状態。
+	if sess.ChapterID != "ch04" {
+		t.Errorf("撃破直後の章 = %s, want ch04（『次へ』まで留まる）", sess.ChapterID)
+	}
+	// 「次へ」で第5章へ。
+	res, err := eng.Step(ctx, "次へ進む")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.ChapterMoved || sess.ChapterID != "ch05" {
+		t.Errorf("『次へ』で進まない: 章=%s moved=%v", sess.ChapterID, res.ChapterMoved)
 	}
 }
 
@@ -159,12 +167,28 @@ func TestChapter2GateRequiresAdvance(t *testing.T) {
 		t.Errorf("探索で章が進んだ: %s", sess.ChapterID)
 	}
 
-	// 前進すると祠に到達し、第3章へ。
-	if _, err := eng.Step(ctx, "そのまま森の道を進んで祠へ向かう"); err != nil {
+	// 前進すると祠に到達し「目標達成（先へ進める）」になるが、即座には進まない。
+	res, err := eng.Step(ctx, "そのまま森の道を進んで祠へ向かう")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if sess.ChapterID != "ch03" {
-		t.Errorf("前進後の章 = %s, want ch03", sess.ChapterID)
+	if !sess.Flag("reached_shrine") {
+		t.Error("前進で reached_shrine が立たない")
+	}
+	if !res.SceneCleared {
+		t.Error("目標達成後に SceneCleared になっていない")
+	}
+	if sess.ChapterID != "ch02" {
+		t.Errorf("達成しただけで章が進んだ: %s（『次へ』まで留まるはず）", sess.ChapterID)
+	}
+
+	// 「次へ」で次の場面（第3章）へ進む。
+	res, err = eng.Step(ctx, "次へ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.ChapterMoved || sess.ChapterID != "ch03" {
+		t.Errorf("『次へ』で進まない: 章=%s moved=%v", sess.ChapterID, res.ChapterMoved)
 	}
 }
 

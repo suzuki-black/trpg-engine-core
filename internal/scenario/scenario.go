@@ -54,16 +54,38 @@ type Boss struct {
 	DefeatSets []string `json:"defeat_sets"`
 }
 
-// Chapter は章。順序とクリア条件は固定。進行ルールもデータで持つ。
+// Entity はシーンに居る／在る人・物・地物（質問への回答や描写に使う）。
+type Entity struct {
+	Name     string `json:"name"`
+	Desc     string `json:"desc"`
+	Position string `json:"position"` // 位置関係（任意）
+}
+
+// Fact はシーンの事実（想定問答）。Reveal で開示条件を制御する。
+//
+//	always : 常に開示（場面説明にも含める）
+//	ask    : 聞かれたら答えてよい
+//	flag:X : フラグ X が立ってから開示
+//	search : この章で探索(search)に成功してから開示（隠し情報）
+//	talk   : この章で会話(talk)に成功してから開示
+type Fact struct {
+	Text   string `json:"text"`
+	Reveal string `json:"reveal"`
+}
+
+// Chapter は章。順序とクリア条件は固定。進行ルール・シーン情報もデータで持つ。
 type Chapter struct {
 	ID           string   `json:"id"`
 	Title        string   `json:"title"`
 	Goal         string   `json:"goal"`
 	SceneSummary string   `json:"scene_summary"`
+	Layout       string   `json:"layout"` // 位置関係の説明（任意）
 	NPCsPresent  []string `json:"npcs_present"`
-	ClearFlag    string   `json:"clear_flag"` // このフラグが立つと次章へ進む
-	ClearHint    string   `json:"clear_hint"` // GM に渡すクリア条件の説明
-	Difficulty   string   `json:"difficulty"` // easy|normal|hard|very_hard（既定 normal）
+	Entities     []Entity `json:"entities"` // 登場物（質問・描写の素材）
+	Facts        []Fact   `json:"facts"`    // 事実リスト（想定問答・開示条件つき）
+	ClearFlag    string   `json:"clear_flag"`
+	ClearHint    string   `json:"clear_hint"`
+	Difficulty   string   `json:"difficulty"`
 	Rules        []Rule   `json:"rules"`
 	Bonuses      []Bonus  `json:"bonuses"`
 	Boss         *Boss    `json:"boss"`

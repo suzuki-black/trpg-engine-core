@@ -34,13 +34,28 @@ func New(c llm.Client, qcRetries int) *GM { return &GM{llm: c, qcRetries: qcRetr
 
 // BuildContext はコンテキスト入力を構造化テキストにする。docs/02-gm-prompt.md §2.3(2)
 // docs/01-architecture.md §1.3(1): 章情報＋シーン＋行動宣言＋判定結果＋関連状態。
-func BuildContext(ch *scenario.Chapter, sess *state.Session, action string, res *dice.CheckResult, npcLines []string, notes []string) string {
+func BuildContext(ch *scenario.Chapter, sess *state.Session, action string, res *dice.CheckResult, npcLines []string, notes []string, facts []string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[操作キャラ] %s（%s）← この名前で呼びかけること\n", sess.Player.Name, sess.Player.Class)
 	fmt.Fprintf(&b, "[章] %s 「%s」\n", ch.ID, ch.Title)
 	fmt.Fprintf(&b, "[章の目的] %s\n", ch.Goal)
 	fmt.Fprintf(&b, "[クリア条件] %s\n", ch.ClearHint)
 	fmt.Fprintf(&b, "[シーン] %s\n", sess.SceneSummary)
+	if ch.Layout != "" {
+		fmt.Fprintf(&b, "[位置関係] %s\n", ch.Layout)
+	}
+	for _, en := range ch.Entities {
+		pos := ""
+		if en.Position != "" {
+			pos = "（" + en.Position + "）"
+		}
+		fmt.Fprintf(&b, "[登場物] %s%s: %s\n", en.Name, pos, en.Desc)
+	}
+	// 開示可能な事実だけを渡す（隠し事実はそもそも渡さない＝GMが漏らせない）。
+	// 聞かれていないのに全部を羅列せず、必要に応じて使うこと。
+	for _, f := range facts {
+		fmt.Fprintf(&b, "[シーン情報（聞かれたら答えてよい事実。勝手に全部は明かさない）] %s\n", f)
+	}
 	fmt.Fprintf(&b, "[世界状態] 時間帯:%s 天候:%s 警戒度:%s 環境:%s\n",
 		dflt(sess.World.TimeOfDay, "夕"), dflt(sess.World.Weather, "曇り"),
 		dflt(sess.World.Alertness, "低"), dflt(sess.World.Ambient, "静か"))
