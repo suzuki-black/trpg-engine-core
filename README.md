@@ -116,6 +116,7 @@ Planned but **not yet implemented**:
 - [ ] **Interactive scenario generator** — interviews the author for the fact list, auto-fills the rest.
 - [ ] **AI co-players** — party members who act and banter on their own turns.
 - [ ] **Tactical combat** — defend, item use, and NPC assists as combat options.
+- [ ] **Localization (English) — last** — `-lang en/ja`: English prompts/keywords, disable the non-Japanese filter, translated scenarios, English UI strings. Deferred until the core experience is settled.
 
 ## 📄 License
 
@@ -241,6 +242,7 @@ D20のクリティカル境界・難易度マッピング、ボス戦の撃破�
 - [ ] **対話型シナリオ生成器** — 事実リストを作者に質問し、他は自動生成。
 - [ ] **AI仲間プレイヤー** — 自分の番で動き・茶々を入れるパーティ。
 - [ ] **戦闘の戦術化** — 防御・アイテム使用・NPC加勢を選択肢に追加。
+- [ ] **多言語化（英語）— 最後に実施** — `-lang en/ja`：プロンプト/キーワードの英語版、非日本語フィルタの無効化、シナリオ英訳、UI文字列の英語化。コア体験が固まってから着手。
 
 ## 📄 ライセンス
 
