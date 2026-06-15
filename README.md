@@ -82,9 +82,13 @@ Covers D20 critical boundaries & difficulty mapping, the boss-combat loop throug
 - [x] **Non-Japanese output filter** — detects simplified-Chinese / foreign scripts / stray Latin words in GM & NPC output and regenerates in Japanese ([`internal/textqc`](internal/textqc/textqc.go), tunable via `-qc-retries`).
 - [x] **Multi-slot saves & autosave** — named save slots under `saves/`, listed by recency; autosaves on every chapter transition.
 - [x] **Externalized scenarios** — chapters, NPCs, progression rules, bonuses, boss, and endings live in JSON; the engine is scenario-agnostic and loads files via `-scenario` ([`internal/scenario`](internal/scenario/scenario.go), default embedded).
+- [x] **Scenes that breathe** — free ask/look from scene facts (no roll), secrets gated behind investigation, and advance-on-your-choice ("次へ") instead of auto-jumping on the first success.
 
 Planned but **not yet implemented**:
 
+- [ ] **Rich scene info for every chapter** — only one chapter is fleshed out so far.
+- [ ] **Interactive scenario generator** — interviews the author for the fact list, auto-fills the rest.
+- [ ] **AI co-players** — party members who act and banter on their own turns.
 - [ ] **Tactical combat** — defend, item use, and NPC assists as combat options.
 
 ## 📄 License
@@ -177,11 +181,14 @@ D20のクリティカル境界・難易度マッピング、ボス戦の撃破�
 - [x] **非日本語フィルタ** — GM/NPC出力の簡体字・他言語スクリプト・ラテン語片を検知し、日本語で再生成（[`internal/textqc`](internal/textqc/textqc.go)、`-qc-retries` で調整可）。
 - [x] **マルチセーブ＆オートセーブ** — `saves/` に名前付きスロットで保存し新しい順に一覧表示。章進行ごとに自動保存。
 - [x] **シナリオの外部化** — 章・NPC・進行ルール・ボーナス・ボス・エンディングを JSON 化。エンジンはシナリオ非依存で `-scenario` で読み込み（[`internal/scenario`](internal/scenario/scenario.go)、既定は埋め込み）。
+- [x] **シーンを息させる** — 観察・質問はシーン情報から判定なしで回答、隠し情報は探索で開放、目標達成しても自動で進まず「次へ」で進行。
 
 予定はありますが**未実装**：
 
+- [ ] **全章へのシーン情報付与** — 今は見本1章のみ。
+- [ ] **対話型シナリオ生成器** — 事実リストを作者に質問し、他は自動生成。
+- [ ] **AI仲間プレイヤー** — 自分の番で動き・茶々を入れるパーティ。
 - [ ] **戦闘の戦術化** — 防御・アイテム使用・NPC加勢を選択肢に追加。
-- [ ] **シナリオの外部化** — 章/NPCを JSON/YAML で定義し、エンジンと分離。
 
 ## 📄 ライセンス
 
