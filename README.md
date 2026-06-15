@@ -49,7 +49,33 @@ go run ./cmd/trpg -scenario scenarios/orbital-amatsu.json
 # (write your own using internal/scenario/scenarios/forgotten-shrine.json as a template)
 ```
 
-Type actions in Japanese. **Asking/looking** ("周りを見る", "何がある?") is free (no roll) and answers from the scene's known facts; the scene **doesn't auto-advance** — say "次へ" to move on when you're ready. In-session commands: `status` / `saves` / `save [name]` / `load [name]` / `quit`. Saves live in `saves/`; chapters autosave to the `autosave` slot.
+## 🎮 How to Play
+
+You play one character; the AI is the GM (and the NPCs). Type what your character **does or says, in Japanese** — there is no command menu.
+
+**A turn:** you declare an action → the engine shows how it read your input → if the outcome is uncertain it calls for a D20 roll → the GM narrates the *result* and hands the scene back to you.
+
+**What you can type:**
+- 🔎 **Look / ask** (free, no roll): `周りを見る` / `ここには何がある？` / `ハルの様子は？` — the GM answers from what's known in the scene. Hidden things stay hidden until you investigate.
+- 🎲 **Act** (may need a roll): `カラスに祠の場所を尋ねる` / `扉の罠を調べる` / `敵に斬りかかる` / `精霊を説得する`. Phrase it as *who you do what to*. Kana/casual is fine.
+- 🚪 **Move on**: meeting a chapter's goal opens the way forward but doesn't rush you — keep talking/exploring, then type `次へ` when ready.
+- 💬 **Table talk** is fine too (`何でいきなり酒場なんだよ`) — the GM just quips back, no roll.
+
+If a turn does nothing, the game tells you why and shows the current objective.
+
+**Example:**
+```
+カイ：周りを見回す。何がある？
+GM：赤い非常灯が点滅し、隔壁の陰に怯えた整備クルーが身を潜めている。正面の気密扉は半開きだ。
+カイ：そのクルーに近づいて、何があったか落ち着いて聞き出す
+GM：さあ会話・交渉判定だ。D20を振って、修正込みで12以上なら成功——いくぞ！
+🎲 D20=17 +1 = 18 → 成功
+ハル：「三日前……突然、通信が途絶えて……」
+（このシーンの目標は果たした。次の場面へ進むなら『次へ』）
+カイ：次へ
+```
+
+**Commands:** `status`（状態）/ `saves`（一覧）/ `save [name]` / `load [name]` / `quit`. Saves live in `saves/`; each chapter autosaves to the `autosave` slot. Editing keys: arrows / Home·End / Backspace·Delete (full-width aware).
 
 ## 🏗️ Architecture
 
@@ -148,7 +174,33 @@ go run ./cmd/trpg -scenario scenarios/orbital-amatsu.json
 # （雛形は internal/scenario/scenarios/forgotten-shrine.json を参照）
 ```
 
-行動は日本語で入力。**観察・質問**（「周りを見る」「何がある?」）は判定なしで、シーンの既知の事実から答えます。目標を達成しても**自動では進まず**、納得したら「次へ」で次の場面へ。コマンド: `status` / `saves`（一覧） / `save [名前]` / `load [名前]` / `quit`。セーブは `saves/` に保存され、章進行ごとに `autosave` スロットへ自動保存されます。
+## 🎮 遊び方
+
+あなたは主人公1人を演じ、AIがGM（とNPC）を担当します。**やること・言うことを日本語で**入力するだけ。コマンドメニューはありません。
+
+**1ターンの流れ:** 行動を宣言 → どう解釈したか表示 → 結果が不確実なら D20 判定 → GMが**結果**を描写して、手番をあなたに返す。
+
+**入力の種類:**
+- 🔎 **観察・質問**（判定なし）: 「周りを見る」「ここには何がある？」「ハルの様子は？」。GMがシーンの分かっている事実から答えます。隠し事は、調べるまで出てきません。
+- 🎲 **行動**（判定が要ることも）: 「カラスに祠の場所を尋ねる」「扉の罠を調べる」「敵に斬りかかる」「精霊を説得する」。**誰に・何をするか**で書くと通りやすい。ひらがな・口語でOK。
+- 🚪 **次へ進む**: 章の目標を達成すると道が開きますが、急かされません。話したり調べたりしてから「次へ」で進行。
+- 💬 **雑談・突っ込み**も可（「何でいきなり酒場なんだよ」）。GMが軽く返すだけで、判定は起きません。
+
+何も起きなかった時は、理由と「いまの目標」を表示します。
+
+**例:**
+```
+カイ：周りを見回す。何がある？
+GM：赤い非常灯が点滅し、隔壁の陰に怯えた整備クルーが身を潜めている。正面の気密扉は半開きだ。
+カイ：そのクルーに近づいて、何があったか落ち着いて聞き出す
+GM：さあ会話・交渉判定だ。D20を振って、修正込みで12以上なら成功——いくぞ！
+🎲 D20=17 +1 = 18 → 成功
+ハル：「三日前……突然、通信が途絶えて……」
+（このシーンの目標は果たした。次の場面へ進むなら『次へ』）
+カイ：次へ
+```
+
+**コマンド:** `status`（状態）/ `saves`（一覧）/ `save [名前]` / `load [名前]` / `quit`。セーブは `saves/`、章進行ごとに `autosave` スロットへ自動保存。編集キー: 矢印 / Home・End / Backspace・Delete（全角対応）。
 
 ## 🏗️ アーキテクチャ
 
