@@ -16,8 +16,11 @@
 | 整合性が主役 | フラグ・章遷移・outcome を型で固め、状態の破綻を防げる |
 | LLM連携が薄い | Ollama を HTTP で叩き、生成テキストを受けるだけで足りる（[02](02-gm-prompt.md)・[03](03-npc-templates.md) でLLMの役割は限定済み） |
 | 判定エンジンと同一言語 | [04-d20-rules.md](04-d20-rules.md) の判定エンジンが Go 前提。中核も Go にすることで一本化できる |
-| 配布 | 単一バイナリで配れる。依存を持ち込まない |
+| 配布 | 単一バイナリで配れる。依存は最小限 |
 | 設計思想との一致 | 「決定論はエンジン、創造はLLM」という方針（[01-architecture.md](01-architecture.md)）に素直に乗る |
+
+> 補足（実装後）: 当初は「依存ゼロ」を想定したが、端末の raw モード制御に **`golang.org/x/term`** を採用した。
+> 行編集は全角（CJK）幅を正しく扱う自前の小型エディタ（[`cmd/trpg/lineedit.go`](../cmd/trpg/lineedit.go)）。純Go・単一バイナリは維持。詳細は [07-implementation-status.md](07-implementation-status.md)。
 
 > RAG・埋め込み・モデル切替などLLM側の作り込みは現時点で計画にないため、Python の強みは活きない。必要になった時点でサイドカー方式で後付けする。
 

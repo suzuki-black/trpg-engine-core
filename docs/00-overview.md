@@ -198,6 +198,9 @@ GMは `critical_failure` を「罠の作動」という不利な展開として�
 | 4 | [04-d20-rules.md](04-d20-rules.md) | D20判定ルールのJSON設計（項目・難易度マッピング・ルール例） |
 | 5 | [05-scenario.md](05-scenario.md) | 最初のシナリオ骨格（章構造・分岐・想定行動） |
 | 6 | [06-tech-stack.md](06-tech-stack.md) | 技術スタック（Go集約の採用理由・構成・拡張方針） |
+| 7 | [07-implementation-status.md](07-implementation-status.md) | **実装状況と設計書からの差分**（現状を知るにはまずここ） |
+
+> ℹ️ `00`〜`06` は初期設計です。実装はその後進化しています（例: GMの行動候補メニューは廃止、シナリオはJSON外部化）。**現状は [07-implementation-status.md](07-implementation-status.md) を参照してください。**
 
 ### 依存関係
 

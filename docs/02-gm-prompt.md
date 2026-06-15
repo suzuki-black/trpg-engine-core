@@ -1,5 +1,9 @@
 # 2. GM AI のプロンプト設計
 
+> ⚠️ **実装の正は [`internal/gm/principles.md`](../internal/gm/principles.md) です。**
+> 本書は初期設計で、その後リプレイ風GM（役割分離・1ターン1ビート）へ進化しました。
+> 特に「行動候補メニューを提示」は**廃止**しています。差分は [07-implementation-status.md](07-implementation-status.md) を参照。
+
 ## 2.1 目的
 
 GM役のAIが、**一貫した振る舞い**でTRPGを進行できるようにするためのプロンプトテンプレートを設計する。
