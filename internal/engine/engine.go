@@ -344,16 +344,39 @@ func (e *Engine) cleanNarration(narr string) string {
 // NPCのセリフ内に主人公名が出てきても（例: ハル：「カイ、お前…」）誤って消さない。
 // 「カイ、どうする?」のような“呼びかけ”は主人公の代弁ではないので残す。
 func isPCAuthored(line, pc string) bool {
-	// 「カイ：…」「カイ:…」のような話者ラベル行。
+	if pc == "" {
+		return false
+	}
+	// 「カイ：…」「カイ:…」の話者ラベル、または「カイ「…」」= 主人公のセリフ代弁。
 	if strings.HasPrefix(line, pc+"：") || strings.HasPrefix(line, pc+":") {
 		return true
 	}
-	// 鉤括弧の外側（地の文・話者表記）だけを見る。
-	outside := stripQuoted(line)
-	// 「カイは…」「カイが…」が地の文に出る＝主人公を主語に動かしている／喋らせている
-	//（例:「『…』カイが声を張り上げる」「カイは歩み寄り、『…』」）。
-	if strings.Contains(outside, pc+"は") || strings.Contains(outside, pc+"が") {
+	if strings.Contains(line, pc+"「") {
 		return true
+	}
+	// 鉤括弧の外側（地の文）で、主人公名に格助詞が続く＝主人公を主語・目的語・所有格に
+	// したナレーション（例:「カイの声が震えた」「カイは歩み寄る」「カイの視線は…」）。
+	// 一方「カイ、どうする?」のような呼びかけ（直後が読点・感嘆・疑問・空白）は残す。
+	outside := stripQuoted(line)
+	for i := 0; ; {
+		j := strings.Index(outside[i:], pc)
+		if j < 0 {
+			break
+		}
+		i = i + j + len(pc)
+		tail := outside[i:]
+		if hasAnyPrefix(tail, "は", "が", "の", "を", "も", "に", "へ", "と", "で", "から", "まで", "なら") {
+			return true // 主人公を主語・所有格にしたナレーション
+		}
+	}
+	return false
+}
+
+func hasAnyPrefix(s string, prefixes ...string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
 	}
 	return false
 }

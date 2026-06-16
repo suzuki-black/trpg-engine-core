@@ -82,6 +82,35 @@ func TestCombatRouteDefeatsBoss(t *testing.T) {
 	}
 }
 
+// GMが主人公を描写した行を除去できるか（役割の簒奪防止）。所有格「カイの」も含む。
+func TestIsPCAuthored(t *testing.T) {
+	pc := "カイ"
+	strip := []string{
+		"カイの声が僅かに震えた。",
+		"カイの視線は壁に留まる。",
+		"カイの問いかけに、ハルは睨む。",
+		"カイは身構えた。",
+		"カイ：「やってやる」",
+		"カイは歩み寄り、「待て」と言った。",
+	}
+	keep := []string{
+		"カイ、どうする？",
+		"ハル：「カイ、信用するな」",
+		"赤い非常灯が点滅している。",
+		"隔壁の陰に怯えたクルーがいる。",
+	}
+	for _, s := range strip {
+		if !isPCAuthored(s, pc) {
+			t.Errorf("除去すべきPC描写を残した: %q", s)
+		}
+	}
+	for _, s := range keep {
+		if isPCAuthored(s, pc) {
+			t.Errorf("残すべき行を除去した: %q", s)
+		}
+	}
+}
+
 // 実プレイで分類ミスした台詞を回帰テストする（末尾重み付けで正される）。
 func TestClassifyIntent(t *testing.T) {
 	cases := []struct {
