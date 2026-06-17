@@ -241,8 +241,16 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		}
 	}
 
-	// 2.5) 戦闘ルート: ボスのいる章で attack はボスHPを削る複数回戦闘として解決する。
+	// 2.4) 判定が走ったターンは「まず行動の結末を描け」と必ず指示する。
+	//      失敗時に結果を描かず投げ返す（「どうする?」だけ）のを防ぐ。
 	var notes []string
+	if check != nil {
+		notes = append(notes, "今回の判定結果は『"+check.Outcome.JP()+
+			"』。まずこの行動の結末を1〜2文で具体的に描写すること。"+
+			"失敗なら、何が得られなかった／どう空振りしたかを必ず描く。最後に手番を返す。")
+	}
+
+	// 2.5) 戦闘ルート: ボスのいる章で attack はボスHPを削る複数回戦闘として解決する。
 	if ch.Boss != nil && actionType == "attack" && check != nil {
 		note, log := e.resolveCombat(ch, check)
 		if note != "" {
@@ -282,6 +290,12 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		return nil, err
 	}
 	res.Narration = e.cleanNarration(narr)
+
+	// 4b) 保険: 判定が走ったのに結果描写が無い（空 or「どうする?」だけ）場合は、
+	//     行動種別と成否に応じた定型の結末文を補う。失敗を黙って投げ返さない。
+	if check != nil && lacksResult(res.Narration) {
+		res.Narration = outcomeFallback(actionType, check.Outcome)
+	}
 
 	// 5) フラグ更新（シナリオ管理の制約に従う）。
 	e.applyProgress(ch, actionType, input, check)
@@ -370,6 +384,61 @@ func isPCAuthored(line, pc string) bool {
 		}
 	}
 	return false
+}
+
+// lacksResult は、GM描写が「行動の結末」を含まない（空、または手番を返す
+// 一言だけ）かを判定する。手番返し行（"どうする" を含む）を除いて中身が無ければ true。
+func lacksResult(narr string) bool {
+	var meat []string
+	for _, ln := range strings.Split(narr, "\n") {
+		t := strings.TrimSpace(ln)
+		if t == "" || strings.Contains(t, "どうする") || strings.Contains(t, "どうしますか") {
+			continue
+		}
+		meat = append(meat, t)
+	}
+	return len(strings.TrimSpace(strings.Join(meat, ""))) == 0
+}
+
+// outcomeFallback は行動種別と判定結果から、最低限の結末文を返す（保険）。
+func outcomeFallback(action string, o dice.Outcome) string {
+	switch action {
+	case "search":
+		switch o {
+		case dice.CriticalSuccess, dice.Success:
+			return "目を凝らして調べると、手がかりらしきものが見えてきた。"
+		case dice.CriticalFailure:
+			return "探ろうとした拍子に手元が狂い、めぼしいものは何も得られないどころか、かえって時間を食ってしまった。"
+		default:
+			return "ざっと調べてみたが、これといったものは見つからなかった。"
+		}
+	case "talk":
+		switch o {
+		case dice.CriticalSuccess, dice.Success:
+			return "言葉が届いたようだ。相手の態度が少しやわらいだ。"
+		case dice.CriticalFailure:
+			return "言葉は逆効果だったらしく、相手は明らかに態度を硬くした。"
+		default:
+			return "言葉を尽くしてみたが、相手の心は動かなかった。"
+		}
+	case "attack":
+		switch o {
+		case dice.CriticalSuccess, dice.Success:
+			return "狙いは見事に決まった。"
+		case dice.CriticalFailure:
+			return "大きく体勢を崩し、反撃を許してしまった。"
+		default:
+			return "攻撃は空を切った。"
+		}
+	}
+	switch o {
+	case dice.CriticalSuccess, dice.Success:
+		return "ひとまず、思惑どおりに事は運んだ。"
+	case dice.CriticalFailure:
+		return "それどころか、状況は少し悪くなった。"
+	default:
+		return "試みはうまくいかなかった。"
+	}
 }
 
 func hasAnyPrefix(s string, prefixes ...string) bool {

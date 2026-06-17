@@ -96,6 +96,15 @@ func sanitizeGM(s string) string {
 				t = strings.TrimSpace(t[len(p):])
 			}
 		}
+		// モデルが付けがちな判定結果ラベル（［失敗］［成功］等）を行頭から除く。
+		for _, p := range []string{
+			"［失敗］", "[失敗]", "［成功］", "[成功]",
+			"［クリティカル成功］", "［クリティカル失敗］", "[クリティカル成功]", "[クリティカル失敗]",
+		} {
+			if strings.HasPrefix(t, p) {
+				t = strings.TrimSpace(t[len(p):])
+			}
+		}
 		if t == "" {
 			blank++
 			if blank >= 2 {
