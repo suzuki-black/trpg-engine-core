@@ -333,7 +333,15 @@ func doTurn(ctx context.Context, eng *engine.Engine, scn *scenario.Scenario, ses
 	}
 
 	if res.SceneCleared && !res.ChapterMoved {
-		fmt.Println("\n（このシーンの目標は果たした。まだ話したり調べたりできる。次の場面へ進むなら『次へ』）")
+		goal := ""
+		if ch := scn.Chapter(sess.ChapterID); ch != nil {
+			goal = ch.Goal
+		}
+		if goal != "" {
+			fmt.Printf("\n（このシーンの目標「%s」を果たした。まだ話したり調べたりできる。次の場面へ進むなら『次へ』）\n", goal)
+		} else {
+			fmt.Println("\n（このシーンの目標を果たした。次の場面へ進むなら『次へ』）")
+		}
 	}
 	if res.ChapterMoved {
 		fmt.Printf("\n──────── 章が進行 ────────\n▼ 第%s章「%s」\n%s\n",

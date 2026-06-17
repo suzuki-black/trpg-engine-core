@@ -249,6 +249,13 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 			"』。まずこの行動の結末を1〜2文で具体的に描写すること。"+
 			"失敗なら、何が得られなかった／どう空振りしたかを必ず描く。最後に手番を返す。")
 	}
+	// 2.4b) この行動でシーンの目標が達成される見込みなら、その達成を必ず描かせる。
+	//       「成功したのに要点をはぐらかす→中途半端なまま次へ」を防ぐ。
+	if !e.Sess.Flag(ch.ClearFlag) && e.willSetClear(ch, actionType, input, check) {
+		notes = append(notes, "この行動で、このシーンの目標『"+ch.Goal+"』が達成される。"+
+			"その達成を描写にはっきり結実させること（NPCが実際に要点を語る／必要な物が手に入る等）。"+
+			"曖昧にはぐらかして終わらせない。")
+	}
 
 	// 2.5) 戦闘ルート: ボスのいる章で attack はボスHPを削る複数回戦闘として解決する。
 	if ch.Boss != nil && actionType == "attack" && check != nil {
@@ -390,9 +397,10 @@ func isPCAuthored(line, pc string) bool {
 // 一言だけ）かを判定する。手番返し行（"どうする" を含む）を除いて中身が無ければ true。
 func lacksResult(narr string) bool {
 	var meat []string
+	handback := []string{"どうする", "どうしますか", "何をする", "次は何", "次の行動", "行動をお願い", "行動を教え", "決めてください", "決めてくれ"}
 	for _, ln := range strings.Split(narr, "\n") {
 		t := strings.TrimSpace(ln)
-		if t == "" || strings.Contains(t, "どうする") || strings.Contains(t, "どうしますか") {
+		if t == "" || containsAny(t, handback...) {
 			continue
 		}
 		meat = append(meat, t)
@@ -552,6 +560,30 @@ func (e *Engine) applyProgress(ch *scenario.Chapter, actionType, input string, c
 			e.Sess.DamageLife(r.Damage)
 		}
 	}
+}
+
+// willSetClear は、この行動でこの章の clear_flag が立つ（＝目標達成）見込みかを予測する。
+// applyProgress の前に「達成を描写せよ」と GM へ指示するために使う。
+func (e *Engine) willSetClear(ch *scenario.Chapter, actionType, input string, check *dice.CheckResult) bool {
+	for _, r := range ch.Rules {
+		if ch.Boss != nil && r.On == "attack" {
+			continue // ボス章の attack は戦闘で解決
+		}
+		if !ruleMatches(r, actionType, input, check) {
+			continue
+		}
+		for _, f := range r.Sets {
+			if f == ch.ClearFlag {
+				return true
+			}
+		}
+	}
+	// ボス章: 攻撃でボスを倒し切ると defeat_sets が clear_flag を立てる。
+	if ch.Boss != nil && actionType == "attack" && check != nil {
+		// 実際の撃破判定は resolveCombat 内。ここでは「最後の一撃か」までは予測しない。
+		return false
+	}
+	return false
 }
 
 // ruleMatches は進行ルールが現在の行動・入力・判定結果に合致するか判定する。
