@@ -165,6 +165,11 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	} else {
 		actionType, usedStat, needCheck = classify(input)
 	}
+	// すべての行動を振らない。挨拶・雑談のような“争いのない会話”は判定不要にする。
+	// （NPCは普通に応じるだけ。説得・交渉・情報の聞き出し等、結果が不確実な talk のみ振る。）
+	if actionType == "talk" && !talkNeedsRoll(input) {
+		needCheck = false
+	}
 	res.Action = actionType
 
 	// 0a) この章は既に目標達成済みか。達成済みで「次へ」と言われたら次の場面へ進む。
@@ -343,6 +348,12 @@ func (e *Engine) cleanNarration(narr string) string {
 		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || strings.HasPrefix(t, "・") {
 			continue
 		}
+		// 行頭が主人公名の行は丸ごと捨てる。
+		// 「アルド：」「アルドは」だけでなく、呼びかけを装った代弁「アルド、〜だろう？」
+		// （主人公の内心の推測）も含めて除去する。手番返しはCLIの入力欄が担う。
+		if pc != "" && strings.HasPrefix(t, pc) {
+			continue
+		}
 		// 話者表記のない「セリフだけ」の行を捨てる（規範: セリフは話者名＋鉤括弧）。
 		// 主人公の台詞の反響など、誰の発言か不明な裸の引用を除去する。
 		if strings.HasPrefix(t, "「") && strings.HasSuffix(t, "」") {
@@ -477,6 +488,24 @@ func stripQuoted(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// talkNeedsRoll は会話が判定を要するか（＝結果が不確実か）を判定する。
+// 挨拶・世間話など“争いのない会話”は判定不要。説得・交渉・脅し・聞き出し等、
+// 相手が抵抗しうる／何かを引き出す試みだけ判定する。
+func talkNeedsRoll(input string) bool {
+	greeting := containsAny(input,
+		"やあ", "こんにち", "こんばん", "おはよ", "よお", "ようっ",
+		"久しぶり", "はじめまして", "挨拶", "調子はどう", "元気", "世間話", "雑談")
+	// 「情報屋」のような肩書きに誤反応しないよう、"情報" 単体は入れない。
+	substantive := containsAny(input,
+		"教え", "どこ", "何が", "何か", "聞き出", "問い", "問い詰",
+		"尋", "説得", "交渉", "頼", "脅", "迫", "秘密", "場所", "真実",
+		"話を聞", "白状", "吐かせ", "言わせ", "誘", "口説", "なだめ", "宥め", "鎮め")
+	if greeting && !substantive {
+		return false // ただの挨拶・雑談 → 判定なし
+	}
+	return true
 }
 
 // isProceed は「次の場面へ進む」意思表示か。シーン達成後の進行トリガに使う。
