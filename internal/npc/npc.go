@@ -44,10 +44,15 @@ tone: （感情・態度。例 冷静/苛立ち/友好的/警戒）`,
 }
 
 // Speak はセリフ＋トーンを生成する。docs/01-architecture.md §1.3(4): 返却はセリフ＋トーンのみ。
-func (n *NPC) Speak(ctx context.Context, t scenario.NPCTemplate, att state.Attitude, sceneSummary, playerSays string) (string, error) {
+// history は直近の会話履歴（記憶はエンジンが保持。docs/08-multi-persona.md §8.4）。
+func (n *NPC) Speak(ctx context.Context, t scenario.NPCTemplate, att state.Attitude, sceneSummary, playerSays string, history []string) (string, error) {
 	sys := systemPrompt(t, att)
-	user := fmt.Sprintf("[NPC] %s\n[状況] %s\n[プレイヤーの発言・行動] %s\n上記に対し、line と tone の2行で応答してください。",
-		t.Name, sceneSummary, playerSays)
+	hist := ""
+	if len(history) > 0 {
+		hist = "[これまでのやり取り]\n" + strings.Join(history, "\n") + "\n"
+	}
+	user := fmt.Sprintf("[NPC] %s\n[状況] %s\n%s[プレイヤーの発言・行動] %s\n上記に対し、line と tone の2行で応答してください。",
+		t.Name, sceneSummary, hist, playerSays)
 	// 非日本語の混入があれば書き直させる。"line:"/"tone:" ラベルは検査対象外（TODO#1）。
 	out, _ := llm.GenerateClean(ctx, n.llm, sys, user, n.qcRetries, "line:", "tone:")
 	return strings.TrimSpace(out), nil

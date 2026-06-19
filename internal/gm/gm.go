@@ -62,6 +62,16 @@ func BuildContext(ch *scenario.Chapter, sess *state.Session, action string, res 
 	if flags := activeFlags(sess); flags != "" {
 		fmt.Fprintf(&b, "[有効フラグ] %s\n", flags)
 	}
+	// これまでのやり取り（直近のみ）。記憶はエンジンが保持。docs/08-multi-persona.md §8.4
+	{
+		hist := sess.Conversation
+		if len(hist) > 6 {
+			hist = hist[len(hist)-6:]
+		}
+		for _, h := range hist {
+			fmt.Fprintf(&b, "[これまでのやり取り] %s\n", h)
+		}
+	}
 	fmt.Fprintf(&b, "[プレイヤーの行動宣言] %s\n", action)
 	if res != nil {
 		fmt.Fprintf(&b, "[判定結果] %s 判定：%s\n", res.ActionType, res.Outcome.JP())

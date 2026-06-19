@@ -111,6 +111,23 @@ func TestIsPCAuthored(t *testing.T) {
 	}
 }
 
+// 会話メモリ: 追記の上限・直近取り出し・NPC発話抽出。docs/08-multi-persona.md §8.4
+func TestConversationMemory(t *testing.T) {
+	eng := &Engine{Sess: state.NewSession()}
+	for i := 0; i < 30; i++ {
+		eng.appendLog("発言")
+	}
+	if len(eng.Sess.Conversation) != maxLogEntries {
+		t.Errorf("会話履歴の上限が効いていない: %d", len(eng.Sess.Conversation))
+	}
+	if got := recentLog([]string{"a", "b", "c"}, 2); len(got) != 2 || got[0] != "b" {
+		t.Errorf("recentLog が不正: %v", got)
+	}
+	if got := npcSay("line: 「やあ」\ntone: 冷静"); got != "「やあ」" {
+		t.Errorf("npcSay 抽出が不正: %q", got)
+	}
+}
+
 // 実プレイで分類ミスした台詞を回帰テストする（末尾重み付けで正される）。
 func TestClassifyIntent(t *testing.T) {
 	cases := []struct {
@@ -218,6 +235,10 @@ func TestChapter2GateRequiresAdvance(t *testing.T) {
 	}
 	if !res.ChapterMoved || sess.ChapterID != "ch03" {
 		t.Errorf("『次へ』で進まない: 章=%s moved=%v", sess.ChapterID, res.ChapterMoved)
+	}
+	// 章が変わると会話履歴はリセットされる（収束の燃料を断つ）。
+	if len(sess.Conversation) != 0 {
+		t.Errorf("章替えで会話履歴がリセットされていない: %v", sess.Conversation)
 	}
 }
 

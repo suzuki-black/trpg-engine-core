@@ -105,6 +105,7 @@ type Session struct {
 	Flags        map[string]bool      `json:"flags"`
 	World        World                `json:"world"`
 	Boss         Boss                 `json:"boss"`
+	Conversation []string             `json:"conversation"` // シーン内の会話履歴（章替えでリセット）
 }
 
 func NewSession() *Session {

@@ -178,6 +178,7 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		if next := e.Scn.NextChapter(ch.ID); next != nil {
 			e.Sess.ChapterID = next.ID
 			e.Sess.SceneSummary = next.SceneSummary
+			e.Sess.Conversation = nil // 場面が変わるので会話履歴をリセット（収束の燃料を断つ）
 			e.ensureNPCs(next)
 			res.Action = "move"
 			res.ChapterMoved = true
@@ -215,6 +216,7 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 			return nil, err
 		}
 		res.Narration = e.cleanNarration(narr)
+		e.appendLog(e.Sess.Player.Name + "（質問）: " + input)
 		return res, nil
 	}
 
@@ -273,15 +275,17 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 
 	// 3) NPC が必要なら NPC モジュールを呼ぶ（GMが必要と判断＝会話系行動かつ登場NPCあり）
 	var npcLines []string
+	var npcSpoke string // 会話ログ用（話者: セリフ）
 	if actionType == "talk" && len(ch.NPCsPresent) > 0 {
 		target := e.pickNPC(ch, input)
 		if target != "" {
 			tmpl := e.Scn.NPCs[target]
 			st := e.Sess.NPC(target)
-			line, err := e.NPC.Speak(ctx, tmpl, st.Attitude, e.Sess.SceneSummary, input)
+			line, err := e.NPC.Speak(ctx, tmpl, st.Attitude, e.Sess.SceneSummary, input, recentLog(e.Sess.Conversation, 6))
 			if err == nil && line != "" {
 				npcLines = append(npcLines, tmpl.Name+" → "+oneLine(line))
 				res.NPCRaw = append(res.NPCRaw, tmpl.Name+":\n"+line)
+				npcSpoke = tmpl.Name + ": " + npcSay(line)
 				// 態度変化（§3.6）: 交渉成功で1段階上昇、クリティカル失敗で1段階下降
 				if check != nil {
 					switch check.Outcome {
@@ -330,6 +334,12 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		res.Hint = "この行動は判定にも進行にも結びつきませんでした。" +
 			"場面を知りたいなら『周りを見回す』『何がある?』、行動なら『誰に・何をするか』を具体的に。" +
 			"\nいまの目標: " + ch.Goal
+	}
+
+	// 7) 会話履歴に今ターンを追記（次ターン以降の文脈になる）。
+	e.appendLog(e.Sess.Player.Name + ": " + input)
+	if npcSpoke != "" {
+		e.appendLog(npcSpoke)
 	}
 	return res, nil
 }
@@ -541,6 +551,39 @@ func (e *Engine) factRevealable(ch *scenario.Chapter, f scenario.Fact) bool {
 		return e.Sess.Flag(strings.TrimPrefix(f.Reveal, "flag:"))
 	}
 	return false
+}
+
+// maxLogEntries は保持する会話履歴の上限（収束の燃料を増やさないための頭打ち）。
+const maxLogEntries = 14
+
+// appendLog はシーンの会話履歴に1行追加する（口調の燃料を抑えるため改行は畳む）。
+func (e *Engine) appendLog(line string) {
+	line = strings.TrimSpace(strings.ReplaceAll(line, "\n", " "))
+	if line == "" {
+		return
+	}
+	e.Sess.Conversation = append(e.Sess.Conversation, line)
+	if len(e.Sess.Conversation) > maxLogEntries {
+		e.Sess.Conversation = e.Sess.Conversation[len(e.Sess.Conversation)-maxLogEntries:]
+	}
+}
+
+// recentLog は会話履歴の直近 n 件を返す（LLM へ渡す窓を小さく保つ）。
+func recentLog(log []string, n int) []string {
+	if len(log) <= n {
+		return log
+	}
+	return log[len(log)-n:]
+}
+
+// npcSay は NPC モジュールの生出力から発話本文（「…」）だけを取り出す（口調ラベルを落とす）。
+func npcSay(raw string) string {
+	if i := strings.Index(raw, "「"); i >= 0 {
+		if j := strings.LastIndex(raw, "」"); j > i {
+			return raw[i : j+len("」")]
+		}
+	}
+	return strings.TrimSpace(strings.ReplaceAll(raw, "\n", " "))
 }
 
 func countTrueFlags(flags map[string]bool) int {
