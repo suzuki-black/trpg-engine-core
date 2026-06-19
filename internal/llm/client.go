@@ -9,7 +9,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -47,6 +49,7 @@ type ollamaReq struct {
 
 type ollamaResp struct {
 	Response string `json:"response"`
+	Error    string `json:"error"` // モデル未取得などは 200 でこのフィールドに入る
 }
 
 func (o *Ollama) Generate(ctx context.Context, system, user string) (string, error) {
@@ -76,20 +79,58 @@ func (o *Ollama) Generate(ctx context.Context, system, user string) (string, err
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", err
 	}
+	if out.Error != "" {
+		return "", fmt.Errorf("ollama: %s", out.Error) // モデル未取得など
+	}
 	return out.Response, nil
 }
 
 // Available は Ollama が起動しているかを確認する。
 func (o *Ollama) Available(ctx context.Context) bool {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.Endpoint+"/api/tags", nil)
+	_, err := o.tags(ctx)
+	return err == nil
+}
+
+// HasModel は指定モデルが取得済みかを確認する（タグ違いも緩く許容）。
+func (o *Ollama) HasModel(ctx context.Context) bool {
+	names, err := o.tags(ctx)
 	if err != nil {
 		return false
+	}
+	for _, n := range names {
+		if n == o.Model || n == o.Model+":latest" || strings.HasPrefix(n, o.Model+":") {
+			return true
+		}
+	}
+	return false
+}
+
+// tags は取得済みモデル名の一覧を返す。
+func (o *Ollama) tags(ctx context.Context) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.Endpoint+"/api/tags", nil)
+	if err != nil {
+		return nil, err
 	}
 	c := &http.Client{Timeout: 2 * time.Second}
 	resp, err := c.Do(req)
 	if err != nil {
-		return false
+		return nil, err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ollama tags: status %d", resp.StatusCode)
+	}
+	var body struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(body.Models))
+	for _, m := range body.Models {
+		names = append(names, m.Name)
+	}
+	return names, nil
 }

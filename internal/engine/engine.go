@@ -329,7 +329,8 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 
 	// 6) 透明性: 実質的な engagement があったかを判定し、無ければヒントを出す。
 	res.Progressed = check != nil || res.SceneCleared || res.Ended ||
-		res.Combat != "" || countTrueFlags(e.Sess.Flags) > trueFlagsBefore
+		res.Combat != "" || len(res.NPCRaw) > 0 ||
+		countTrueFlags(e.Sess.Flags) > trueFlagsBefore
 	if !res.Progressed {
 		res.Hint = "この行動は判定にも進行にも結びつきませんでした。" +
 			"場面を知りたいなら『周りを見回す』『何がある?』、行動なら『誰に・何をするか』を具体的に。" +
@@ -375,11 +376,10 @@ func (e *Engine) cleanNarration(narr string) string {
 		}
 		kept = append(kept, ln)
 	}
-	out := strings.TrimSpace(strings.Join(kept, "\n"))
-	if out == "" {
-		return strings.TrimSpace(narr)
-	}
-	return out
+	// 全部が「主人公の代弁／鉤括弧」で消えたら、原文に戻さず空のまま返す。
+	// （原文を戻すと代弁がそのまま漏れる。判定ありなら呼び出し側が定型文で補い、
+	//  会話ならNPCの発言行が状況を担うため、空でも問題ない。）
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
 // isPCAuthored は、その行が「主人公（pc）を主語に行動・発話させている」GMの逸脱

@@ -109,11 +109,17 @@ func main() {
 		client = llm.NewMock()
 	} else {
 		o := llm.NewOllama(*endpoint, *model)
-		if o.Available(context.Background()) {
-			client = o
-		} else {
-			fmt.Println("（Ollama に接続できないため offline mock で起動します）")
+		switch {
+		case !o.Available(context.Background()):
+			fmt.Println("（Ollama に接続できないため offline mock で起動します。`ollama serve` を確認してください）")
 			client = llm.NewMock()
+		case !o.HasModel(context.Background()):
+			fmt.Printf("⚠ モデル '%s' が見つかりません。`ollama pull %s` で取得するか、-model で取得済みのモデルを指定してください。\n",
+				*model, *model)
+			fmt.Println("（今回は offline mock で起動します）")
+			client = llm.NewMock()
+		default:
+			client = o
 		}
 	}
 
