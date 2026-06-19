@@ -69,7 +69,8 @@ func BuildContext(ch *scenario.Chapter, sess *state.Session, action string, res 
 		fmt.Fprintf(&b, "[判定結果] （判定なし）\n")
 	}
 	for _, l := range npcLines {
-		fmt.Fprintf(&b, "[NPC発言（このセリフを地の文に統合せよ）] %s\n", l)
+		fmt.Fprintf(&b, "[NPC発言（既に画面に表示済み。同じセリフを繰り返さない。"+
+			"話者の様子・表情・場の反応だけを短く添えてよい）] %s\n", l)
 	}
 	for _, n := range notes {
 		fmt.Fprintf(&b, "[特記（この状況を描写に反映せよ。数値には触れない）] %s\n", n)
@@ -96,6 +97,9 @@ func sanitizeGM(s string) string {
 				t = strings.TrimSpace(t[len(p):])
 			}
 		}
+		// Markdown の見出し記号（#, ##, ### …）の漏れを行頭から除く。
+		t = strings.TrimLeft(t, "#")
+		t = strings.TrimSpace(t)
 		// モデルが付けがちな判定結果ラベル（［失敗］［成功］等）を行頭から除く。
 		for _, p := range []string{
 			"［失敗］", "[失敗]", "［成功］", "[成功]",

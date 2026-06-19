@@ -354,9 +354,10 @@ func (e *Engine) cleanNarration(narr string) string {
 		if pc != "" && strings.HasPrefix(t, pc) {
 			continue
 		}
-		// 話者表記のない「セリフだけ」の行を捨てる（規範: セリフは話者名＋鉤括弧）。
-		// 主人公の台詞の反響など、誰の発言か不明な裸の引用を除去する。
-		if strings.HasPrefix(t, "「") && strings.HasSuffix(t, "」") {
+		// GMの地の文に鉤括弧のセリフを書かせない。NPCのセリフはNPC欄に既に表示され、
+		// 主人公のセリフはプレイヤーのもの。GMが「…」を書くのは再引用か代弁なので捨てる。
+		// GMは話者の態度・様子・場の反応だけを地の文で添える。
+		if strings.Contains(t, "「") {
 			continue
 		}
 		if pc != "" && isPCAuthored(t, pc) {
