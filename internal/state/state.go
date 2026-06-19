@@ -97,22 +97,24 @@ func (b *Boss) Alive() bool { return b.Active && b.HP > 0 }
 
 // Session は 1 プレイ全体の状態。司令塔=セッション管理が保持する。
 type Session struct {
-	Player       PlayerCharacter      `json:"player"`
-	NPCs         map[string]*NPCState `json:"npcs"`
-	ChapterID    string               `json:"chapter_id"`
-	SceneSummary string               `json:"scene_summary"`
-	DoneEvents   map[string]bool      `json:"done_events"` // 発生済みイベント
-	Flags        map[string]bool      `json:"flags"`
-	World        World                `json:"world"`
-	Boss         Boss                 `json:"boss"`
-	Conversation []string             `json:"conversation"` // シーン内の会話履歴（章替えでリセット）
+	Player        PlayerCharacter      `json:"player"`
+	NPCs          map[string]*NPCState `json:"npcs"`
+	ChapterID     string               `json:"chapter_id"`
+	SceneSummary  string               `json:"scene_summary"`
+	DoneEvents    map[string]bool      `json:"done_events"` // 発生済みイベント
+	Flags         map[string]bool      `json:"flags"`
+	World         World                `json:"world"`
+	Boss          Boss                 `json:"boss"`
+	Conversation  []string             `json:"conversation"`   // シーン内の会話履歴（章替えでリセット）
+	KnownEntities map[string]bool      `json:"known_entities"` // プレイヤーが既に知った登場人物名（章替えでリセット）
 }
 
 func NewSession() *Session {
 	return &Session{
-		NPCs:       map[string]*NPCState{},
-		DoneEvents: map[string]bool{},
-		Flags:      map[string]bool{},
+		NPCs:          map[string]*NPCState{},
+		DoneEvents:    map[string]bool{},
+		Flags:         map[string]bool{},
+		KnownEntities: map[string]bool{},
 	}
 }
 

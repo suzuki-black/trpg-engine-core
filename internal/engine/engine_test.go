@@ -128,6 +128,53 @@ func TestConversationMemory(t *testing.T) {
 	}
 }
 
+// 未紹介の在席NPCは、紹介されるまでGMコンテキストに出さず、名指しも消す。
+// （挨拶した相手以外のNPCが説明なく登場するのを防ぐ。）
+func TestUnintroducedNPCHidden(t *testing.T) {
+	scn := scenario.ForgottenShrine()
+	sess := state.NewSession()
+	sess.ChapterID = "ch01"
+	sess.SceneSummary = scn.Chapter("ch01").SceneSummary // カラスのみ言及、ミレーユは未紹介
+	mock := llm.NewMock()
+	eng := New(scn, sess, rand.New(rand.NewSource(1)), gm.New(mock, 0), npc.New(mock, 0))
+	ch := scn.Chapter("ch01")
+
+	names := func() []string {
+		var n []string
+		for _, e := range eng.visibleEntities(ch) {
+			n = append(n, e.Name)
+		}
+		return n
+	}
+
+	// カラスへ挨拶しても、ミレーユはまだ見える登場物に入らない。
+	eng.revealEntities(ch, "情報屋カラスに声をかける", "talk")
+	if got := names(); contains(got, "ミレーユ") {
+		t.Errorf("挨拶だけでミレーユが見えてしまった: %v", got)
+	}
+	if !contains(names(), "カラス") {
+		t.Error("カラスは見えるべき")
+	}
+	// GMが未紹介のミレーユを名指しした行は除去される。
+	if out := eng.cleanNarration("酒場の隅にミレーユが座っている。\nカラスがこちらを睨む。"); strings.Contains(out, "ミレーユ") {
+		t.Errorf("未紹介NPCの名指し行が残った: %q", out)
+	}
+	// 周りを見回す(ask)とミレーユが紹介され、以後は見える。
+	eng.revealEntities(ch, "あたりを見回す", "ask")
+	if got := names(); !contains(got, "ミレーユ") {
+		t.Errorf("観察後もミレーユが紹介されない: %v", got)
+	}
+}
+
+func contains(ss []string, s string) bool {
+	for _, x := range ss {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
 // 実プレイで分類ミスした台詞を回帰テストする（末尾重み付けで正される）。
 func TestClassifyIntent(t *testing.T) {
 	cases := []struct {

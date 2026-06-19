@@ -171,6 +171,8 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		needCheck = false
 	}
 	res.Action = actionType
+	// プレイヤーが知った登場人物を更新（未紹介の人物をGMに渡さないため）。
+	e.revealEntities(ch, input, actionType)
 
 	// 0a) この章は既に目標達成済みか。達成済みで「次へ」と言われたら次の場面へ進む。
 	cleared := e.Sess.Flag(ch.ClearFlag)
@@ -178,7 +180,8 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		if next := e.Scn.NextChapter(ch.ID); next != nil {
 			e.Sess.ChapterID = next.ID
 			e.Sess.SceneSummary = next.SceneSummary
-			e.Sess.Conversation = nil // 場面が変わるので会話履歴をリセット（収束の燃料を断つ）
+			e.Sess.Conversation = nil                // 場面が変わるので会話履歴をリセット（収束の燃料を断つ）
+			e.Sess.KnownEntities = map[string]bool{} // 新しい場面の登場人物はまた紹介し直す
 			e.ensureNPCs(next)
 			res.Action = "move"
 			res.ChapterMoved = true
@@ -196,7 +199,7 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	if actionType == "ooc" {
 		note := "プレイヤーは物語内の行動ではなく、雑談・軽口・突っ込み・質問をした。" +
 			"GMとして気さくに一言返し、物語は進めず、操作キャラに次の行動を促すこと。"
-		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note}, nil)
+		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note}, nil, e.visibleEntities(ch))
 		narr, err := e.GM.Narrate(ctx, cInput)
 		if err != nil {
 			return nil, err
@@ -210,7 +213,7 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		note := "プレイヤーは場面について質問・観察した。" +
 			"下の[シーン情報]の範囲だけで答えること。書かれていないことは『分からない/見当たらない』と返す。" +
 			"判定はせず、物語も進めない。"
-		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note}, e.revealableFacts(ch))
+		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note}, e.revealableFacts(ch), e.visibleEntities(ch))
 		narr, err := e.GM.Narrate(ctx, cInput)
 		if err != nil {
 			return nil, err
@@ -300,7 +303,7 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	}
 
 	// 4) GM 描写を生成（判定結果・NPC発言・特記・開示可能な事実を統合）
-	cInput := gm.BuildContext(ch, e.Sess, input, check, npcLines, notes, e.revealableFacts(ch))
+	cInput := gm.BuildContext(ch, e.Sess, input, check, npcLines, notes, e.revealableFacts(ch), e.visibleEntities(ch))
 	narr, err := e.GM.Narrate(ctx, cInput)
 	if err != nil {
 		return nil, err
@@ -351,12 +354,18 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 // 全部消えてしまう場合は元の文を返す。
 func (e *Engine) cleanNarration(narr string) string {
 	pc := e.Sess.Player.Name
+	// まだプレイヤーに紹介していない在席人物の名前（GMが勝手に登場させたら消す）。
+	hidden := e.hiddenCharacterNames()
 	lines := strings.Split(strings.TrimSpace(narr), "\n")
 	kept := make([]string, 0, len(lines))
 	for _, ln := range lines {
 		t := strings.TrimSpace(ln)
 		// 箇条書きの選択肢メニュー行を捨てる。
 		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || strings.HasPrefix(t, "・") {
+			continue
+		}
+		// 未紹介の登場人物をGMが名指しで出した行は捨てる（説明なくNPCが現れるのを防ぐ）。
+		if containsAnyName(t, hidden) {
 			continue
 		}
 		// 行頭が主人公名の行は丸ごと捨てる。
@@ -555,6 +564,71 @@ func (e *Engine) factRevealable(ch *scenario.Chapter, f scenario.Fact) bool {
 
 // maxLogEntries は保持する会話履歴の上限（収束の燃料を増やさないための頭打ち）。
 const maxLogEntries = 14
+
+// presentCharacters はこの章に登場する「人物」の表示名集合を返す（場所・群衆は除く）。
+func (e *Engine) presentCharacters(ch *scenario.Chapter) map[string]bool {
+	names := map[string]bool{}
+	for _, id := range ch.NPCsPresent {
+		if t, ok := e.Scn.NPCs[id]; ok && t.Name != "" {
+			names[t.Name] = true
+		}
+	}
+	return names
+}
+
+// revealEntities はプレイヤーの行動から「もう知っている登場人物」を更新する。
+// 開幕の説明文に名前がある人物は常に既知。観察(ask)で場の全員が既知になる。
+// 発言・行動で名前を出した相手も既知になる。docs/08 役割境界（未紹介NPCを勝手に出さない）。
+func (e *Engine) revealEntities(ch *scenario.Chapter, input, actionType string) {
+	if e.Sess.KnownEntities == nil {
+		e.Sess.KnownEntities = map[string]bool{}
+	}
+	for name := range e.presentCharacters(ch) {
+		if strings.Contains(e.Sess.SceneSummary, name) ||
+			actionType == "ask" || strings.Contains(input, name) {
+			e.Sess.KnownEntities[name] = true
+		}
+	}
+}
+
+// hiddenCharacterNames は在席するが「まだプレイヤーに紹介していない」人物名を返す。
+func (e *Engine) hiddenCharacterNames() []string {
+	ch := e.Scn.Chapter(e.Sess.ChapterID)
+	if ch == nil {
+		return nil
+	}
+	var out []string
+	for name := range e.presentCharacters(ch) {
+		if !e.Sess.KnownEntities[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// containsAnyName は文字列が名前のいずれかを含むかを返す。
+func containsAnyName(s string, names []string) bool {
+	for _, n := range names {
+		if n != "" && strings.Contains(s, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// visibleEntities はGMに渡してよい登場物を返す。場所・群衆は常に、
+// 登場人物はプレイヤーが既に知った相手だけ（未紹介の人物をGMが名指ししないように）。
+func (e *Engine) visibleEntities(ch *scenario.Chapter) []scenario.Entity {
+	chars := e.presentCharacters(ch)
+	out := make([]scenario.Entity, 0, len(ch.Entities))
+	for _, en := range ch.Entities {
+		if chars[en.Name] && !e.Sess.KnownEntities[en.Name] {
+			continue // まだ紹介していない登場人物は伏せる
+		}
+		out = append(out, en)
+	}
+	return out
+}
 
 // appendLog はシーンの会話履歴に1行追加する（口調の燃料を抑えるため改行は畳む）。
 func (e *Engine) appendLog(line string) {

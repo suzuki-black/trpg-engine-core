@@ -34,7 +34,9 @@ func New(c llm.Client, qcRetries int) *GM { return &GM{llm: c, qcRetries: qcRetr
 
 // BuildContext はコンテキスト入力を構造化テキストにする。docs/02-gm-prompt.md §2.3(2)
 // docs/01-architecture.md §1.3(1): 章情報＋シーン＋行動宣言＋判定結果＋関連状態。
-func BuildContext(ch *scenario.Chapter, sess *state.Session, action string, res *dice.CheckResult, npcLines []string, notes []string, facts []string) string {
+// entities は「この場面でプレイヤーが既に知っている登場物」だけを渡すこと。
+// まだ紹介していない登場人物を入れると、GMがいきなり名指しで登場させてしまう。
+func BuildContext(ch *scenario.Chapter, sess *state.Session, action string, res *dice.CheckResult, npcLines []string, notes []string, facts []string, entities []scenario.Entity) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[操作キャラ] %s（%s）← この名前で呼びかけること\n", sess.Player.Name, sess.Player.Class)
 	fmt.Fprintf(&b, "[章] %s 「%s」\n", ch.ID, ch.Title)
@@ -44,7 +46,7 @@ func BuildContext(ch *scenario.Chapter, sess *state.Session, action string, res 
 	if ch.Layout != "" {
 		fmt.Fprintf(&b, "[位置関係] %s\n", ch.Layout)
 	}
-	for _, en := range ch.Entities {
+	for _, en := range entities {
 		pos := ""
 		if en.Position != "" {
 			pos = "（" + en.Position + "）"
