@@ -145,13 +145,54 @@ func TestCleanNarrationKeepsOneBeat(t *testing.T) {
 	eng := New(scn, sess, rand.New(rand.NewSource(1)), gm.New(mock, 0), npc.New(mock, 0))
 
 	multi := "カラスはこちらを見据えた。\n\n広場では村人たちがざわめいている。\n\nカラスは慎重に周囲を見渡し、隅を指した。"
-	got := eng.cleanNarration(multi)
+	got := firstBeat(eng.cleanNarration(multi)) // 行動描写は narrate が firstBeat で1ビートに絞る
 	if !strings.Contains(got, "カラスはこちらを見据えた") {
 		t.Errorf("最初のビートが消えた: %q", got)
 	}
 	if strings.Contains(got, "村人") || strings.Contains(got, "隅を指") {
 		t.Errorf("先の段落（独走）が残った: %q", got)
 	}
+}
+
+// 不変条件バリデータ: 合格/各違反を検出する。docs/09-robustness.md §9.3
+func TestValidateGMBeat(t *testing.T) {
+	scn := scenario.ForgottenShrine()
+	sess := state.NewSession()
+	sess.ChapterID = "ch01"
+	sess.Player.Name = "アルド"
+	sess.KnownEntities["カラス"] = true // カラスは紹介済み、ミレーユは未紹介
+	mock := llm.NewMock()
+	eng := New(scn, sess, rand.New(rand.NewSource(1)), gm.New(mock, 0), npc.New(mock, 0))
+
+	hasViolation := func(narr, want string) {
+		t.Helper()
+		got := eng.validateGMBeat(narr, true)
+		for _, v := range got {
+			if strings.Contains(v, want) {
+				return
+			}
+		}
+		t.Errorf("%q に対し違反 %q を検出できず: %v", narr, want, got)
+	}
+
+	// 合格（1〜2文の三人称の地の文）。
+	if v := eng.validateGMBeat("カラスは鋭い目でこちらを見据えた。", true); len(v) != 0 {
+		t.Errorf("合格すべき描写で違反: %v", v)
+	}
+	// 観察への回答（oneBeat=false）では複数文でも 1ビート違反にならない。
+	long := "酒場の奥にカラスがいる。卓には酒杯が並ぶ。広場では村人がざわめいている。"
+	for _, v := range eng.validateGMBeat(long, false) {
+		if strings.Contains(v, "1ビート") {
+			t.Errorf("観察回答に1ビート制約がかかった: %v", v)
+		}
+	}
+	hasViolation("", "空")
+	hasViolation("「やってやる」と男が笑った。", "セリフ")
+	hasViolation("アルドは剣を抜いた。", "主人公")
+	hasViolation("酒場の隅にミレーユが座っている。", "未紹介")
+	hasViolation("カラスが頷いた。\n---", "メタ")
+	hasViolation("了解しました。", "メタ")
+	hasViolation("広場に出た。\n\n酒場に戻った。\n\nさらに森へ向かった。", "1ビート")
 }
 
 // 会話メモリ: 追記の上限・直近取り出し・NPC発話抽出。docs/08-multi-persona.md §8.4

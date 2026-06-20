@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 
 	"trpg-engine-core/internal/dice"
@@ -16,6 +17,7 @@ import (
 	"trpg-engine-core/internal/npc"
 	"trpg-engine-core/internal/scenario"
 	"trpg-engine-core/internal/state"
+	"trpg-engine-core/internal/textqc"
 )
 
 type Engine struct {
@@ -200,11 +202,11 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 		note := "プレイヤーは物語内の行動ではなく、雑談・軽口・突っ込み・質問をした。" +
 			"GMとして気さくに一言返し、物語は進めず、操作キャラに次の行動を促すこと。"
 		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note}, nil, e.visibleEntities(ch))
-		narr, err := e.GM.Narrate(ctx, cInput)
+		narr, err := e.narrate(ctx, cInput, false)
 		if err != nil {
 			return nil, err
 		}
-		res.Narration = e.cleanNarration(narr)
+		res.Narration = narr
 		return res, nil
 	}
 
@@ -214,11 +216,11 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 			"下の[シーン情報]の範囲だけで答えること。書かれていないことは『分からない/見当たらない』と返す。" +
 			"判定はせず、物語も進めない。"
 		cInput := gm.BuildContext(ch, e.Sess, input, nil, nil, []string{note}, e.revealableFacts(ch), e.visibleEntities(ch))
-		narr, err := e.GM.Narrate(ctx, cInput)
+		narr, err := e.narrate(ctx, cInput, false)
 		if err != nil {
 			return nil, err
 		}
-		res.Narration = e.cleanNarration(narr)
+		res.Narration = narr
 		if res.Narration == "" {
 			res.Narration = "ざっと見たかぎり、目を引くものは特にない。"
 		}
@@ -314,11 +316,11 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 
 	// 4) GM 描写を生成（判定結果・NPC発言・特記・開示可能な事実を統合）
 	cInput := gm.BuildContext(ch, e.Sess, input, check, npcLines, notes, e.revealableFacts(ch), e.visibleEntities(ch))
-	narr, err := e.GM.Narrate(ctx, cInput)
+	narr, err := e.narrate(ctx, cInput, true)
 	if err != nil {
 		return nil, err
 	}
-	res.Narration = e.cleanNarration(narr)
+	res.Narration = narr
 
 	// 4b) 保険: 判定が走ったのに結果描写が無い（空 or「どうする?」だけ）場合は、
 	//     行動種別と成否に応じた定型の結末文を補う。失敗を黙って投げ返さない。
@@ -363,6 +365,103 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	return res, nil
 }
 
+// maxBeatRetries は不変条件違反時に GM 描写を作り直させる最大回数。
+// レイテンシ抑制のため最小限（合計2生成まで）。docs/09-robustness.md §9.11
+const maxBeatRetries = 1
+
+// narrate は GM 描写を生成し、不変条件（docs/09 §9.3 I1〜I6）を満たすか検査する。
+// 違反があれば理由を添えて作り直させ（最大 maxBeatRetries 回）、最後は cleanNarration で
+// 整えて返す（決定論フォールバックは呼び出し側の空補完が担う）。
+// 出力を“削る”のではなく“規約で弾いて作り直す”ことで、特定モデルの癖への密結合を避ける。
+// oneBeat=true は「行動の結果」を描く経路（1ビート＝1〜2文に絞る）。
+// false は「質問・観察への回答」など、複数文で事実を列挙してよい経路。
+func (e *Engine) narrate(ctx context.Context, cInput string, oneBeat bool) (string, error) {
+	for i := 0; ; i++ {
+		raw, err := e.GM.Narrate(ctx, cInput)
+		if err != nil {
+			return "", err
+		}
+		// まず決定論クリーニングで整える（これが堅牢化の主役）。
+		cleaned := e.cleanNarration(raw)
+		if oneBeat {
+			cleaned = firstBeat(cleaned) // 行動描写だけ1ビートに絞る
+		}
+		// 整えた“後”の結果が規約を満たすか検査する。満たせば採用。
+		// クリーニングで直せない違反（＝空・言語逸脱など、GMが使える材料を返さなかった
+		// 場合）だけ作り直す。直せる違反で良い回答を捨てて作り直さない。
+		violations := e.validateGMBeat(cleaned, oneBeat)
+		if len(violations) == 0 || i >= maxBeatRetries {
+			return cleaned, nil
+		}
+		cInput += "\n[再生成の指示] 直前の出力は次の点で不適切でした: " +
+			strings.Join(violations, " / ") +
+			"。主人公やNPCのセリフ（「」）を書かず、区切り線やメタ発言も入れず、" +
+			"三人称の地の文で書き直してください。"
+	}
+}
+
+// validateGMBeat は GM 描写が不変条件（docs/09 §9.3）を満たすか検査し、
+// 違反理由の一覧を返す（空なら合格）。判定ロジックは既存フィルタと共有する。
+// oneBeat=false（質問・観察への回答）では I1（1ビート）は課さない。
+func (e *Engine) validateGMBeat(narr string, oneBeat bool) []string {
+	t := strings.TrimSpace(narr)
+	if t == "" {
+		return []string{"空（最低1文の結果が必要）"} // I5
+	}
+	pc := e.Sess.Player.Name
+	hidden := e.hiddenCharacterNames()
+	seen := map[string]bool{}
+	add := func(reasons ...string) {
+		for _, r := range reasons {
+			seen[r] = true
+		}
+	}
+	if oneBeat && (strings.Contains(t, "\n\n") || countSentences(t) > 3) {
+		add("1ビートを超える（1〜2文に収める）") // I1（行動描写のみ）
+	}
+	for _, ln := range strings.Split(t, "\n") {
+		s := strings.TrimSpace(ln)
+		if s == "" {
+			continue
+		}
+		if strings.Contains(s, "「") {
+			add("セリフ（「」）を含む") // I2
+		}
+		if pc != "" && (strings.HasPrefix(s, pc) || isPCAuthored(s, pc)) {
+			add("主人公を代弁している") // I2
+		}
+		if isSeparatorLine(s) || (strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]")) || isMetaAck(s) {
+			add("メタ・装飾を含む") // I4
+		}
+		if containsAnyName(s, hidden) {
+			add("未紹介の登場人物を名指ししている") // I3
+		}
+	}
+	if !textqc.IsClean(t) {
+		add("日本語以外を含む") // I6
+	}
+	out := make([]string, 0, len(seen))
+	for r := range seen {
+		out = append(out, r)
+	}
+	sort.Strings(out) // 再現性のため順序を固定
+	return out
+}
+
+// countSentences は文末記号（。！？）の数で文の数を数える。
+func countSentences(s string) int {
+	n := 0
+	for _, r := range s {
+		if r == '。' || r == '！' || r == '？' {
+			n++
+		}
+	}
+	if n == 0 && strings.TrimSpace(s) != "" {
+		return 1 // 句点なしでも内容があれば1文とみなす
+	}
+	return n
+}
+
 // cleanNarration は GM 出力から、小型モデルが混ぜがちな
 // 「操作キャラのセリフ代弁」と「箇条書きの選択肢メニュー」を除去する。
 // （リプレイ風にするため、行動候補メニューもプレイヤー代弁も出さない方針。）
@@ -386,6 +485,10 @@ func (e *Engine) cleanNarration(narr string) string {
 		}
 		// アシスタント的な相づち（「了解しました」「承知しました」等）は地の文ではない。
 		if isMetaAck(t) {
+			continue
+		}
+		// 手番を返すメタ発言（「次に何をする？」「どうする？」等）は捨てる（入力はCLIが促す）。
+		if isHandback(t) {
 			continue
 		}
 		// 未紹介の登場人物をGMが名指しで出した行は捨てる（説明なくNPCが現れるのを防ぐ）。
@@ -412,8 +515,8 @@ func (e *Engine) cleanNarration(narr string) string {
 	// 全部が「主人公の代弁／鉤括弧」で消えたら、原文に戻さず空のまま返す。
 	// （原文を戻すと代弁がそのまま漏れる。判定ありなら呼び出し側が定型文で補い、
 	//  会話ならNPCの発言行が状況を担うため、空でも問題ない。）
-	// 残ったものは最初の1ビートだけに絞る（GMの独走を抑える）。
-	return firstBeat(strings.Join(kept, "\n"))
+	// 1ビートへの圧縮は narrate 側（行動描写のみ）が担う。観察への回答は絞らない。
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
 // isPCAuthored は、その行が「主人公（pc）を主語に行動・発話させている」GMの逸脱
@@ -639,6 +742,23 @@ func isMetaAck(t string) bool {
 		"オーケー", "ＯＫ", "OK", "Sure", "はい、わかり", "はい、了解",
 	} {
 		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// isHandback は「手番を返す」メタ発言の行か（次の行動を促す問いかけ）。
+// 入力はCLIが促すので地の文に書かせない。短い問いかけ行のみを対象にする。
+func isHandback(t string) bool {
+	if !strings.HasSuffix(t, "？") && !strings.HasSuffix(t, "?") {
+		return false
+	}
+	for _, p := range []string{
+		"どうする", "どうしますか", "どうします", "次に何", "何をする", "何をします",
+		"次の行動", "いかがします", "どうなさ",
+	} {
+		if strings.Contains(t, p) {
 			return true
 		}
 	}
