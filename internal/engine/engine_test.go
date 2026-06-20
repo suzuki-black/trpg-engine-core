@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"trpg-engine-core/internal/dice"
 	"trpg-engine-core/internal/gm"
 	"trpg-engine-core/internal/llm"
 	"trpg-engine-core/internal/npc"
@@ -173,6 +174,48 @@ func contains(ss []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// 第1章の目標は「会話判定に成功しさえすれば何でもクリア」ではなく、
+// 依頼の受諾＋カラスから祠の場所を聞き出す、という内容に紐付く。
+func TestChapter1GoalNeedsRightConversation(t *testing.T) {
+	scn := scenario.ForgottenShrine()
+	sess := state.NewSession()
+	sess.ChapterID = "ch01"
+	mock := llm.NewMock()
+	eng := New(scn, sess, rand.New(rand.NewSource(1)), gm.New(mock, 0), npc.New(mock, 0))
+	ch := scn.Chapter("ch01")
+	succ := &dice.CheckResult{ActionType: "talk", Outcome: dice.Success}
+
+	// 目的と無関係な talk 成功（カラスに仕事を頼む）ではクリアしない。
+	eng.applyProgress(ch, "talk", "カラスに仕事を頼みたいんだが", succ)
+	if sess.Flag("location_known") {
+		t.Error("祠の話をしていないのに location_known が立った")
+	}
+	if eng.chapterCleared(ch) {
+		t.Error("目的と無関係な会話成功でシーンがクリアした")
+	}
+	if eng.advancesGoal(ch, "talk", "カラスに仕事を頼みたいんだが", succ) {
+		t.Error("無関係な会話が目標前進と判定された（軌道修正が効かない）")
+	}
+
+	// 村長の依頼を引き受ける → quest_accepted。だが場所未取得なのでまだクリアしない。
+	eng.applyProgress(ch, "move", "村長の家へ行き、依頼を引き受ける", nil)
+	if !sess.Flag("quest_accepted") {
+		t.Error("依頼受諾が立たない")
+	}
+	if eng.chapterCleared(ch) {
+		t.Error("場所未取得なのにクリアした")
+	}
+
+	// カラスに祠の場所を尋ねて成功 → location_known。両条件そろって初めてクリア。
+	eng.applyProgress(ch, "talk", "カラスに祠の場所を尋ねる", succ)
+	if !sess.Flag("location_known") {
+		t.Error("祠の場所を尋ねて成功しても location_known が立たない")
+	}
+	if !eng.chapterCleared(ch) {
+		t.Error("依頼受諾＋場所取得がそろってもクリアにならない")
+	}
 }
 
 // 実プレイで分類ミスした台詞を回帰テストする（末尾重み付けで正される）。

@@ -51,10 +51,12 @@
         { "text": "ハルは事故の引き金が自分の操作ミスではないかと密かに恐れている", "reveal": "talk" }
       ],
       "clear_flag": "core_located",
-      "clear_hint": "ハルと話し、何が起きたのか・中枢区画の場所を聞き出せばクリア。",
+      "clear_requires": ["quest_accepted"],
+      "clear_hint": "ハルと話し、何が起きたのか（状況）と中枢区画の場所を聞き出せばクリア。",
       "difficulty": "normal",
       "rules": [
-        { "on": "talk", "outcome": "success", "sets": ["quest_accepted", "core_located"] },
+        { "on": "talk", "outcome": "success", "requires_any": ["状況", "何が", "事情", "状態", "異常", "起き", "経緯", "原因"], "sets": ["quest_accepted"] },
+        { "on": "talk", "outcome": "success", "requires_any": ["中枢", "コア", "炉心", "区画", "場所", "どこ", "行き方", "経路"], "sets": ["core_located"] },
         { "on": "any", "requires_all": ["ハル", "同行"], "sets": ["crew_ally"] }
       ]
     },

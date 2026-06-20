@@ -76,20 +76,21 @@ type Fact struct {
 
 // Chapter は章。順序とクリア条件は固定。進行ルール・シーン情報もデータで持つ。
 type Chapter struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Goal         string   `json:"goal"`
-	SceneSummary string   `json:"scene_summary"`
-	Layout       string   `json:"layout"` // 位置関係の説明（任意）
-	NPCsPresent  []string `json:"npcs_present"`
-	Entities     []Entity `json:"entities"` // 登場物（質問・描写の素材）
-	Facts        []Fact   `json:"facts"`    // 事実リスト（想定問答・開示条件つき）
-	ClearFlag    string   `json:"clear_flag"`
-	ClearHint    string   `json:"clear_hint"`
-	Difficulty   string   `json:"difficulty"`
-	Rules        []Rule   `json:"rules"`
-	Bonuses      []Bonus  `json:"bonuses"`
-	Boss         *Boss    `json:"boss"`
+	ID            string   `json:"id"`
+	Title         string   `json:"title"`
+	Goal          string   `json:"goal"`
+	SceneSummary  string   `json:"scene_summary"`
+	Layout        string   `json:"layout"` // 位置関係の説明（任意）
+	NPCsPresent   []string `json:"npcs_present"`
+	Entities      []Entity `json:"entities"` // 登場物（質問・描写の素材）
+	Facts         []Fact   `json:"facts"`    // 事実リスト（想定問答・開示条件つき）
+	ClearFlag     string   `json:"clear_flag"`
+	ClearRequires []string `json:"clear_requires"` // clear_flag に加えて全て真が必要な前提フラグ（任意）
+	ClearHint     string   `json:"clear_hint"`
+	Difficulty    string   `json:"difficulty"`
+	Rules         []Rule   `json:"rules"`
+	Bonuses       []Bonus  `json:"bonuses"`
+	Boss          *Boss    `json:"boss"`
 }
 
 // Ending は最終分岐。requires を満たす最初のものが採用される。

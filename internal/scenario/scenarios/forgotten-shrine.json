@@ -60,10 +60,12 @@
       ],
       "npcs_present": ["karasu", "mireille"],
       "clear_flag": "location_known",
-      "clear_hint": "依頼を受諾し、情報屋カラスから祠の場所を聞き出せばクリア。",
+      "clear_requires": ["quest_accepted"],
+      "clear_hint": "村長の依頼を引き受け、情報屋カラスから祠の場所を聞き出せばクリア。",
       "difficulty": "normal",
       "rules": [
-        { "on": "talk", "outcome": "success", "sets": ["quest_accepted", "location_known"] },
+        { "on": "any", "requires_any": ["村長", "依頼を受", "依頼を引", "引き受", "受注", "受諾", "依頼を承"], "sets": ["quest_accepted"] },
+        { "on": "talk", "outcome": "success", "requires_any": ["祠", "遺跡", "場所", "在処", "ありか", "どこ", "行き方", "道"], "sets": ["location_known"] },
         { "on": "any", "requires_all": ["ミレーユ", "同行"], "sets": ["mireille_ally"] }
       ]
     },

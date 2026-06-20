@@ -175,7 +175,7 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	e.revealEntities(ch, input, actionType)
 
 	// 0a) この章は既に目標達成済みか。達成済みで「次へ」と言われたら次の場面へ進む。
-	cleared := e.Sess.Flag(ch.ClearFlag)
+	cleared := e.chapterCleared(ch)
 	if cleared && isProceed(input) {
 		if next := e.Scn.NextChapter(ch.ID); next != nil {
 			e.Sess.ChapterID = next.ID
@@ -261,10 +261,17 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	}
 	// 2.4b) この行動でシーンの目標が達成される見込みなら、その達成を必ず描かせる。
 	//       「成功したのに要点をはぐらかす→中途半端なまま次へ」を防ぐ。
-	if !e.Sess.Flag(ch.ClearFlag) && e.willSetClear(ch, actionType, input, check) {
+	if !e.chapterCleared(ch) && e.willSetClear(ch, actionType, input, check) {
 		notes = append(notes, "この行動で、このシーンの目標『"+ch.Goal+"』が達成される。"+
 			"その達成を描写にはっきり結実させること（NPCが実際に要点を語る／必要な物が手に入る等）。"+
 			"曖昧にはぐらかして終わらせない。")
+	}
+	// 2.4c) 会話が目標から逸れている（成功しても進展しない）ときは、GMにさりげない軌道修正を促す。
+	//       「目的と無関係な会話で判定だけ消費して空転する」のを防ぐ。
+	if actionType == "talk" && !e.chapterCleared(ch) && !e.advancesGoal(ch, actionType, input, check) {
+		notes = append(notes, "プレイヤーの会話はこのシーンの目標『"+ch.Goal+"』から逸れている。"+
+			"結果は描きつつ、誰に何を訊けば前へ進むかをNPCがそれとなく示すなど、目標へ自然に水を向ける。"+
+			"ただし答えを押しつけたり、勝手に目標を達成させたりしない。")
 	}
 
 	// 2.5) 戦闘ルート: ボスのいる章で attack はボスHPを削る複数回戦闘として解決する。
@@ -321,7 +328,7 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 
 	// 5b) 章の進行は「シーンを息させる」。目標達成しても即座に進めず、
 	//     プレイヤーが「次へ」と決めるまで場面に留まれる（最終章は即エンディング）。
-	if e.Sess.Flag(ch.ClearFlag) {
+	if e.chapterCleared(ch) {
 		if e.Scn.NextChapter(ch.ID) != nil {
 			res.SceneCleared = true // 先へ進める状態（進むのは「次へ」入力時＝0a）
 		} else if !cleared {
@@ -709,9 +716,22 @@ func (e *Engine) applyProgress(ch *scenario.Chapter, actionType, input string, c
 	}
 }
 
-// willSetClear は、この行動でこの章の clear_flag が立つ（＝目標達成）見込みかを予測する。
-// applyProgress の前に「達成を描写せよ」と GM へ指示するために使う。
-func (e *Engine) willSetClear(ch *scenario.Chapter, actionType, input string, check *dice.CheckResult) bool {
+// chapterCleared は章の目標が達成済みか（clear_flag と、あれば clear_requires が全て真）を返す。
+func (e *Engine) chapterCleared(ch *scenario.Chapter) bool {
+	if !e.Sess.Flag(ch.ClearFlag) {
+		return false
+	}
+	for _, req := range ch.ClearRequires {
+		if !e.Sess.Flag(req) {
+			return false
+		}
+	}
+	return true
+}
+
+// rulesWouldSet はこの行動で合致するルールが立てるフラグ集合を返す。
+func (e *Engine) rulesWouldSet(ch *scenario.Chapter, actionType, input string, check *dice.CheckResult) map[string]bool {
+	out := map[string]bool{}
 	for _, r := range ch.Rules {
 		if ch.Boss != nil && r.On == "attack" {
 			continue // ボス章の attack は戦闘で解決
@@ -720,15 +740,41 @@ func (e *Engine) willSetClear(ch *scenario.Chapter, actionType, input string, ch
 			continue
 		}
 		for _, f := range r.Sets {
-			if f == ch.ClearFlag {
-				return true
-			}
+			out[f] = true
 		}
 	}
-	// ボス章: 攻撃でボスを倒し切ると defeat_sets が clear_flag を立てる。
-	if ch.Boss != nil && actionType == "attack" && check != nil {
-		// 実際の撃破判定は resolveCombat 内。ここでは「最後の一撃か」までは予測しない。
+	return out
+}
+
+// willSetClear は、この行動で章の目標が「完全に」達成される見込みかを予測する。
+// applyProgress の前に「達成を描写せよ」と GM へ指示するために使う。
+func (e *Engine) willSetClear(ch *scenario.Chapter, actionType, input string, check *dice.CheckResult) bool {
+	willSet := e.rulesWouldSet(ch, actionType, input, check)
+	if len(willSet) == 0 {
 		return false
+	}
+	has := func(f string) bool { return e.Sess.Flag(f) || willSet[f] }
+	if !has(ch.ClearFlag) {
+		return false
+	}
+	for _, req := range ch.ClearRequires {
+		if !has(req) {
+			return false
+		}
+	}
+	return true
+}
+
+// advancesGoal は、この行動が目標フラグ（clear_flag か前提フラグ）を1つでも前進させるか。
+func (e *Engine) advancesGoal(ch *scenario.Chapter, actionType, input string, check *dice.CheckResult) bool {
+	goal := map[string]bool{ch.ClearFlag: true}
+	for _, req := range ch.ClearRequires {
+		goal[req] = true
+	}
+	for f := range e.rulesWouldSet(ch, actionType, input, check) {
+		if goal[f] {
+			return true
+		}
 	}
 	return false
 }
