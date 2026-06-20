@@ -112,6 +112,28 @@ func TestIsPCAuthored(t *testing.T) {
 	}
 }
 
+// GMが混ぜがちな区切り線(---)やメタラベル([入力をお待ちしています])を地の文から除去する。
+func TestCleanNarrationStripsJunk(t *testing.T) {
+	scn := scenario.ForgottenShrine()
+	sess := state.NewSession()
+	sess.ChapterID = "ch01"
+	sess.Player.Name = "アルド"
+	sess.KnownEntities["カラス"] = true // 既に紹介済みとする
+	mock := llm.NewMock()
+	eng := New(scn, sess, rand.New(rand.NewSource(1)), gm.New(mock, 0), npc.New(mock, 0))
+
+	in := "カラスは静かにこちらを見た。\n---\n[入力をお待ちしています]\n═══\nアルドは身構えた。"
+	got := eng.cleanNarration(in)
+	for _, bad := range []string{"---", "═══", "入力をお待ち", "アルドは"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("除去すべき行が残った %q: 結果=%q", bad, got)
+		}
+	}
+	if !strings.Contains(got, "カラスは静かに") {
+		t.Errorf("正当な地の文が消えた: %q", got)
+	}
+}
+
 // 会話メモリ: 追記の上限・直近取り出し・NPC発話抽出。docs/08-multi-persona.md §8.4
 func TestConversationMemory(t *testing.T) {
 	eng := &Engine{Sess: state.NewSession()}

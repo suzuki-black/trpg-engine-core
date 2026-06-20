@@ -371,6 +371,11 @@ func (e *Engine) cleanNarration(narr string) string {
 		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || strings.HasPrefix(t, "・") {
 			continue
 		}
+		// 区切り線（---, ───, ═══, *** 等）や、モデルが模倣したメタラベル
+		// （[入力をお待ちしています] 等の角括弧だけの行）を捨てる。
+		if isSeparatorLine(t) || (strings.HasPrefix(t, "[") && strings.HasSuffix(t, "]")) {
+			continue
+		}
 		// 未紹介の登場人物をGMが名指しで出した行は捨てる（説明なくNPCが現れるのを防ぐ）。
 		if containsAnyName(t, hidden) {
 			continue
@@ -611,6 +616,22 @@ func (e *Engine) hiddenCharacterNames() []string {
 		}
 	}
 	return out
+}
+
+// isSeparatorLine は罫線・区切り線だけの行か（--- / ─── / ═══ / *** / ___ 等）を返す。
+func isSeparatorLine(t string) bool {
+	if t == "" {
+		return false
+	}
+	for _, r := range t {
+		switch r {
+		case '-', '–', '—', '─', '━', '=', '═', '＝', '*', '_', '＿', '・', '·', ' ', '\t':
+			// 区切りに使われがちな文字
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // containsAnyName は文字列が名前のいずれかを含むかを返す。
