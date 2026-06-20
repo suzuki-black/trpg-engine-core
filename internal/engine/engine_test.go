@@ -134,6 +134,26 @@ func TestCleanNarrationStripsJunk(t *testing.T) {
 	}
 }
 
+// GMが1ターンで複数段落を独走しても、最初の1ビートだけに絞る。
+func TestCleanNarrationKeepsOneBeat(t *testing.T) {
+	scn := scenario.ForgottenShrine()
+	sess := state.NewSession()
+	sess.ChapterID = "ch01"
+	sess.Player.Name = "アルド"
+	sess.KnownEntities["カラス"] = true
+	mock := llm.NewMock()
+	eng := New(scn, sess, rand.New(rand.NewSource(1)), gm.New(mock, 0), npc.New(mock, 0))
+
+	multi := "カラスはこちらを見据えた。\n\n広場では村人たちがざわめいている。\n\nカラスは慎重に周囲を見渡し、隅を指した。"
+	got := eng.cleanNarration(multi)
+	if !strings.Contains(got, "カラスはこちらを見据えた") {
+		t.Errorf("最初のビートが消えた: %q", got)
+	}
+	if strings.Contains(got, "村人") || strings.Contains(got, "隅を指") {
+		t.Errorf("先の段落（独走）が残った: %q", got)
+	}
+}
+
 // 会話メモリ: 追記の上限・直近取り出し・NPC発話抽出。docs/08-multi-persona.md §8.4
 func TestConversationMemory(t *testing.T) {
 	eng := &Engine{Sess: state.NewSession()}

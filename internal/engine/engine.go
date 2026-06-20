@@ -219,6 +219,9 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 			return nil, err
 		}
 		res.Narration = e.cleanNarration(narr)
+		if res.Narration == "" {
+			res.Narration = "ざっと見たかぎり、目を引くものは特にない。"
+		}
 		e.appendLog(e.Sess.Player.Name + "（質問）: " + input)
 		return res, nil
 	}
@@ -322,6 +325,11 @@ func (e *Engine) Step(ctx context.Context, input string) (*TurnResult, error) {
 	if check != nil && lacksResult(res.Narration) {
 		res.Narration = outcomeFallback(actionType, check.Outcome)
 	}
+	// 4c) 保険2: 判定なしの行動（移動など）でGM描写が空になっても、無言で手番を返さない。
+	//     プレイヤーの入力に対し、最低限の結果を必ず返す。
+	if res.Narration == "" {
+		res.Narration = actionAck(actionType)
+	}
 
 	// 5) フラグ更新（シナリオ管理の制約に従う）。
 	e.applyProgress(ch, actionType, input, check)
@@ -376,6 +384,10 @@ func (e *Engine) cleanNarration(narr string) string {
 		if isSeparatorLine(t) || (strings.HasPrefix(t, "[") && strings.HasSuffix(t, "]")) {
 			continue
 		}
+		// アシスタント的な相づち（「了解しました」「承知しました」等）は地の文ではない。
+		if isMetaAck(t) {
+			continue
+		}
 		// 未紹介の登場人物をGMが名指しで出した行は捨てる（説明なくNPCが現れるのを防ぐ）。
 		if containsAnyName(t, hidden) {
 			continue
@@ -400,7 +412,8 @@ func (e *Engine) cleanNarration(narr string) string {
 	// 全部が「主人公の代弁／鉤括弧」で消えたら、原文に戻さず空のまま返す。
 	// （原文を戻すと代弁がそのまま漏れる。判定ありなら呼び出し側が定型文で補い、
 	//  会話ならNPCの発言行が状況を担うため、空でも問題ない。）
-	return strings.TrimSpace(strings.Join(kept, "\n"))
+	// 残ったものは最初の1ビートだけに絞る（GMの独走を抑える）。
+	return firstBeat(strings.Join(kept, "\n"))
 }
 
 // isPCAuthored は、その行が「主人公（pc）を主語に行動・発話させている」GMの逸脱
@@ -616,6 +629,66 @@ func (e *Engine) hiddenCharacterNames() []string {
 		}
 	}
 	return out
+}
+
+// isMetaAck は、GMが地の文ではなくアシスタント的な相づちを返した行か。
+// （「了解しました」「承知しました」等。物語描写ではないので捨てる。）
+func isMetaAck(t string) bool {
+	for _, p := range []string{
+		"了解", "承知", "かしこまり", "わかりました", "分かりました",
+		"オーケー", "ＯＫ", "OK", "Sure", "はい、わかり", "はい、了解",
+	} {
+		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// actionAck は、GM描写が空になったときに返す最小限の結果文（無言で手番を返さないため）。
+func actionAck(actionType string) string {
+	switch actionType {
+	case "move":
+		return "そちらへ移動した。あたりに、特に変わった様子はない。"
+	case "talk":
+		return "言葉を投げかけたが、めぼしい反応は返ってこない。"
+	case "search":
+		return "ひととおり調べたが、めぼしいものは見つからない。"
+	default:
+		return "特に、これといったことは起こらなかった。"
+	}
+}
+
+// firstBeat は描写を「最初の1段落（＝1ターン1ビート）」に制限する。
+// 小型モデルが1ターンで複数の場面・出来事を独走的に書き連ねるのを抑える。
+func firstBeat(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	// 最初の空行までを1ビートとみなす。
+	if i := strings.Index(s, "\n\n"); i >= 0 {
+		s = strings.TrimSpace(s[:i])
+	}
+	// 段落区切りが無くても、長すぎる場合は先頭4文までに抑える。
+	return capSentences(s, 4)
+}
+
+// capSentences は文末記号（。！？）で区切って先頭 n 文までに切り詰める。
+func capSentences(s string, n int) string {
+	if n <= 0 {
+		return s
+	}
+	count := 0
+	for i, r := range s {
+		if r == '。' || r == '！' || r == '？' {
+			count++
+			if count >= n {
+				return strings.TrimSpace(s[:i+len(string(r))])
+			}
+		}
+	}
+	return s
 }
 
 // isSeparatorLine は罫線・区切り線だけの行か（--- / ─── / ═══ / *** / ___ 等）を返す。
