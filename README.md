@@ -93,7 +93,7 @@ GM：さあ会話・交渉判定だ。D20を振って、修正込みで12以上�
 | Persistence | [`internal/persist`](internal/persist/persist.go) | JSON save / load |
 | CLI | [`cmd/trpg`](cmd/trpg/main.go) | Terminal UI |
 
-Full design notes (concept → mechanics → tech choice) live in [`docs/`](docs/) (`00`–`06`); current implementation status and where it diverges from the original design is in [`docs/07-implementation-status.md`](docs/07-implementation-status.md).
+Full design notes (concept → mechanics → tech choice) live in [`docs/`](docs/) (`00`–`06`); current implementation status and where it diverges from the original design is in [`docs/07-implementation-status.md`](docs/07-implementation-status.md). Keeping multiple AI personas from blending is covered in [`docs/08-multi-persona.md`](docs/08-multi-persona.md); the model-independent robustness plan (GM output contract + validators, replacing per-model string filters) is in [`docs/09-robustness.md`](docs/09-robustness.md).
 
 ## 🧪 Tests
 
@@ -219,7 +219,7 @@ GM：さあ会話・交渉判定だ。D20を振って、修正込みで12以上�
 | 永続化 | [`internal/persist`](internal/persist/persist.go) | JSON セーブ/ロード |
 | CLI | [`cmd/trpg`](cmd/trpg/main.go) | ターミナルUI |
 
-設計書（コンセプト→機構→技術選定）は [`docs/`](docs/)（`00`〜`06`）に収録。**現在の実装状況と設計書との差分**は [`docs/07-implementation-status.md`](docs/07-implementation-status.md) を参照。
+設計書（コンセプト→機構→技術選定）は [`docs/`](docs/)（`00`〜`06`）に収録。**現在の実装状況と設計書との差分**は [`docs/07-implementation-status.md`](docs/07-implementation-status.md) を参照。複数AI人格の混線対策は [`docs/08-multi-persona.md`](docs/08-multi-persona.md)、**モデル非依存の堅牢化方針（GM出力契約＋バリデータで、モデル依存の文字列フィルタを置き換える）** は [`docs/09-robustness.md`](docs/09-robustness.md) を参照。
 
 ## 🧪 テスト
 
